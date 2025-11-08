@@ -32,6 +32,7 @@ let lastMessageTime = {};
 let botStatus = 'OFFLINE';
 let botUserInfo = null;
 let lastError = null;
+let isListening = false;
 
 const signature = '\n\n— 💕𝑴𝑹 𝑨𝑨𝑯𝑨𝑵 💕';
 
@@ -99,10 +100,29 @@ function saveConfig() {
   }
 }
 
+// === STOP LISTENING FUNCTION (FIXED) ===
+function stopBotListening() {
+  if (botAPI && isListening) {
+    try {
+      // For facebook-chat-api, we need to mark as not listening
+      isListening = false;
+      emitLog('Bot listening stopped');
+      return true;
+    } catch (e) {
+      emitLog('Error stopping listener: ' + e.message, true);
+      return false;
+    }
+  }
+  return true;
+}
+
 // === BOT INIT ===
 function initializeBot(cookies, prefixArg, adminArg) {
   emitLog('🚀 Initializing bot...');
   updateBotStatus('CONNECTING');
+  
+  // Stop previous instance
+  stopBotListening();
   
   currentCookies = cookies;
   if (prefixArg) prefix = prefixArg;
@@ -123,6 +143,7 @@ function initializeBot(cookies, prefixArg, adminArg) {
 
     emitLog('✅ Bot logged in successfully!');
     botAPI = api;
+    isListening = true;
     
     // Get bot user info
     try {
@@ -143,7 +164,8 @@ function initializeBot(cookies, prefixArg, adminArg) {
       emitLog('Could not fetch bot user info: ' + e.message, true);
     }
 
-    botAPI.setOptions({ 
+    // Set API options
+    api.setOptions({ 
       selfListen: true, 
       listenEvents: true, 
       updatePresence: false,
@@ -151,9 +173,10 @@ function initializeBot(cookies, prefixArg, adminArg) {
       logLevel: 'silent'
     });
 
-    setTimeout(async () => {
+    // Start listening after short delay
+    setTimeout(() => {
       try { 
-        await setBotNicknamesInGroups(); 
+        setBotNicknamesInGroups(); 
         emitLog('Bot nicknames restored in all groups');
       } catch (e) { 
         emitLog('Error restoring nicknames: ' + e.message, true); 
@@ -161,62 +184,73 @@ function initializeBot(cookies, prefixArg, adminArg) {
       startListening(api);
     }, 2000);
 
+    // Auto-save config
     setInterval(saveConfig, 5 * 60 * 1000);
   });
 }
 
-// === RECONNECT SYSTEM ===
+// === RECONNECT SYSTEM (FIXED) ===
 function reconnectAndListen() {
+  if (reconnectAttempt > 5) {
+    emitLog('❌ Max reconnect attempts reached; reinitializing login.', true);
+    initializeBot(currentCookies, prefix, adminID);
+    return;
+  }
+
   reconnectAttempt++;
   emitLog(`🔄 Reconnect attempt #${reconnectAttempt}...`);
   updateBotStatus('RECONNECTING');
   
-  if (botAPI) {
-    try { 
-      botAPI.stopListening(); 
-      emitLog('Stopped previous listening');
-    } catch (e) {
-      emitLog('Error stopping listener: ' + e.message, true);
+  // Stop current listening
+  stopBotListening();
+  
+  setTimeout(() => {
+    if (botAPI && isListening) {
+      startListening(botAPI);
+    } else {
+      emitLog('Bot API not available, reinitializing...');
+      initializeBot(currentCookies, prefix, adminID);
     }
-  }
-
-  if (reconnectAttempt > 5) {
-    emitLog('❌ Max reconnect attempts reached; reinitializing login.', true);
-    initializeBot(currentCookies, prefix, adminID);
-  } else {
-    setTimeout(() => {
-      if (botAPI) {
-        startListening(botAPI);
-      } else {
-        emitLog('Bot API not available, reinitializing...');
-        initializeBot(currentCookies, prefix, adminID);
-      }
-    }, 5000);
-  }
+  }, 5000);
 }
 
-// === LISTENER ===
+// === LISTENER (FIXED) ===
 function startListening(api) {
+  if (!isListening) {
+    emitLog('Listener stopped by user');
+    return;
+  }
+
   emitLog('👂 Starting message listener...');
   
-  api.listenMqtt(async (err, event) => {
+  // Listen for messages
+  api.listen((err, event) => {
     if (err) {
-      emitLog('❌ Listener error: ' + err.message, true);
+      if (err.error === 'Not logged in') {
+        emitLog('❌ Session expired, need to relogin', true);
+        updateBotStatus('ERROR');
+        return;
+      }
+      emitLog('❌ Listener error: ' + JSON.stringify(err), true);
       reconnectAndListen();
       return;
     }
 
+    if (!event) return;
+
     try {
-      if (event.type === 'message' || event.type === 'message_reply') {
-        await handleMessage(api, event);
-      } else if (event.logMessageType === 'log:thread-name') {
-        await handleThreadNameChange(api, event);
-      } else if (event.logMessageType === 'log:user-nickname') {
-        await handleNicknameChange(api, event);
-      } else if (event.logMessageType === 'log:subscribe') {
-        await handleBotAddedToGroup(api, event);
-      } else if (event.logMessageType === 'log:unsubscribe') {
-        await handleUserLeftGroup(api, event);
+      // Handle different event types
+      switch (event.type) {
+        case 'message':
+        case 'message_reply':
+          handleMessage(api, event);
+          break;
+        case 'event':
+          handleEvent(api, event);
+          break;
+        default:
+          // Ignore other events
+          break;
       }
     } catch (e) {
       emitLog('❌ Handler crashed: ' + e.message, true);
@@ -227,53 +261,74 @@ function startListening(api) {
   updateBotStatus('LISTENING', botUserInfo);
 }
 
+// === EVENT HANDLER ===
+function handleEvent(api, event) {
+  const logMessageType = event.logMessageType;
+  
+  switch (logMessageType) {
+    case 'log:thread-name':
+      handleThreadNameChange(api, event);
+      break;
+    case 'log:user-nickname':
+      handleNicknameChange(api, event);
+      break;
+    case 'log:subscribe':
+      handleBotAddedToGroup(api, event);
+      break;
+    case 'log:unsubscribe':
+      handleUserLeftGroup(api, event);
+      break;
+    default:
+      // Ignore other log types
+      break;
+  }
+}
+
 // === FORMAT MESSAGE ===
-async function formatMessage(api, event, mainText) {
+function formatMessage(api, event, mainText, callback) {
   const { senderID, threadID } = event;
   let senderName = 'User';
 
-  try {
-    const info = await new Promise((resolve) => {
-      api.getUserInfo(senderID, (err, ret) => {
-        if (err) resolve(null);
-        else resolve(ret);
+  api.getUserInfo(senderID, (err, ret) => {
+    if (err || !ret[senderID]) {
+      senderName = `User-${senderID}`;
+      return callback({
+        body: `@${senderName} ${mainText}\n\n— 💕𝑴𝑹 𝑨𝑨𝑯𝑨𝑵 💕\n------------------------------`,
+        mentions: [{ tag: `@${senderName}`, id: senderID }]
       });
-    });
-    
-    senderName = info?.[senderID]?.name || null;
+    }
 
+    senderName = ret[senderID].name;
+    
+    // If name is "Facebook User", try to get from thread info
     if (!senderName || senderName.toLowerCase().includes('facebook user')) {
-      const thread = await new Promise((resolve) => {
-        api.getThreadInfo(threadID, (err, info) => {
-          if (err) resolve(null);
-          else resolve(info);
+      api.getThreadInfo(threadID, (err, threadInfo) => {
+        if (!err && threadInfo && threadInfo.userInfo) {
+          const user = threadInfo.userInfo.find(u => u.id === senderID);
+          senderName = user?.name || `User-${senderID}`;
+        }
+        
+        callback({
+          body: `@${senderName} ${mainText}\n\n— 💕𝑴𝑹 𝑨𝑨𝑯𝑨𝑵 💕\n------------------------------`,
+          mentions: [{ tag: `@${senderName}`, id: senderID }]
         });
       });
-      
-      if (thread && thread.userInfo) {
-        const user = thread.userInfo.find(u => u.id === senderID);
-        senderName = user?.name || `User-${senderID}`;
-      } else {
-        senderName = `User-${senderID}`;
-      }
+    } else {
+      callback({
+        body: `@${senderName} ${mainText}\n\n— 💕𝑴𝑹 𝑨𝑨𝑯𝑨𝑵 💕\n------------------------------`,
+        mentions: [{ tag: `@${senderName}`, id: senderID }]
+      });
     }
-  } catch {
-    senderName = `User-${senderID}`;
-  }
-
-  return {
-    body: `@${senderName} ${mainText}\n\n— 💕𝑴𝑹 𝑨𝑨𝑯𝑨𝑵 💕\n------------------------------`,
-    mentions: [{ tag: `@${senderName}`, id: senderID }]
-  };
+  });
 }
 
 // === HANGER MESSAGE FUNCTION ===
-async function sendHangerMessage(api, threadID) {
+function sendHangerMessage(api, threadID) {
   try {
     const hangerMessage = {
-      body: '𝔸𝕃𝕃 ℍ𝔼𝕃ℙ𝔼ℝ𝕊 𝕂𝕀 𝕄𝔸𝔸 ℂℍ𝕆𝔻ℕ𝔼 𝕎𝔸𝕃𝔸 𝟡𝟡ℍ𝟡ℕ ℍ𝟛ℝ𝟛 (•◡•)\n❤️ FEEL KRO APNE BAAP KO 💚\n｡ 🎀 𝒜𝒜𝐻𝒜𝒩 𝐼𝒩𝒳𝐼𝒟𝐸 🎀 ｡'
+      body: 'AAHAN H3R3❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️ FEEL KRO APNE BAAP KO 💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚💚 🎀 𝒜𝒜𝐻𝒜𝒩 𝐼𝒩𝒳𝐼𝒟𝐸 🎀 ｡'
     };
-    await api.sendMessage(hangerMessage, threadID);
+    api.sendMessage(hangerMessage, threadID);
     emitLog(`Hanger message sent in thread: ${threadID}`);
   } catch (error) {
     emitLog(`Failed to send hanger message: ${error.message}`, true);
@@ -290,13 +345,13 @@ function stopHangerInThread(threadID) {
 }
 
 // === MESSAGE HANDLER ===
-async function handleMessage(api, event) {
+function handleMessage(api, event) {
   const { threadID, senderID, body } = event;
   if (!body) return;
   const msg = body.toLowerCase();
 
   // Ignore messages from the bot itself
-  const botID = api.getCurrentUserID && api.getCurrentUserID();
+  const botID = api.getCurrentUserID();
   if (senderID === botID) return;
 
   // Log incoming message
@@ -314,7 +369,7 @@ async function handleMessage(api, event) {
       // admin commands allowed
     } else {
       if (isCommand && !isAdmin) {
-        await api.sendMessage({ body: 'You don\'t have permission to use commands while target is locked.' }, threadID);
+        api.sendMessage({ body: 'You don\'t have permission to use commands while target is locked.' }, threadID);
       }
       return;
     }
@@ -331,7 +386,10 @@ async function handleMessage(api, event) {
   // Handle commands
   if (isCommand) {
     if (!isAdmin) {
-      return api.sendMessage(await formatMessage(api, event, 'Permission denied: admin only.'), threadID);
+      formatMessage(api, event, 'Permission denied: admin only.', (formattedMsg) => {
+        api.sendMessage(formattedMsg, threadID);
+      });
+      return;
     }
 
     const args = body.slice(prefix.length).trim().split(/ +/);
@@ -347,20 +405,22 @@ async function handleMessage(api, event) {
     if (command === 'botout') return handleBotOutCommand(api, event, args, isAdmin);
     if (command === 'hanger') return handleHangerCommand(api, event, args, isAdmin);
     if (command === 'status') return handleStatusCommand(api, event, args, isAdmin);
+    if (command === 'stop') return handleStopCommand(api, event, args, isAdmin);
 
-    const help = await formatMessage(api, event, '═══════════════════\n𝐠𝐫𝐨𝐮𝐩 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐆𝐑𝐎𝐔𝐏 𝐍𝐀𝐌𝐄\n𝐧𝐢𝐜𝐤𝐧𝐚𝐦𝐞 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐍𝐈𝐂𝐊𝐍𝐀𝐌𝐄\n𝐭𝐚𝐫𝐠𝐞𝐭 𝐨𝐧/off <userID> → 𝐓𝐀𝐑𝐆𝐄𝐓 𝐋𝐎𝐂𝐊\n𝐚𝐧𝐭𝐢𝐨𝐮𝐭 𝐨𝐧/𝐨𝐟𝐟 → 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐛𝐨𝐭𝐨𝐮𝐭 𝐨𝐧/𝐨𝐟𝐟 → 𝐁𝐎𝐓 𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐡𝐚𝐧𝐠𝐞𝐫 𝐨𝐧/𝐨𝐟𝐟 → 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐬𝐭𝐚𝐭𝐮𝐬 → 𝐁𝐎𝐓 𝐒𝐓𝐀𝐓𝐔𝐒\n═══════════════════');
-    return api.sendMessage(help, threadID);
+    formatMessage(api, event, '═══════════════════\n𝐠𝐫𝐨𝐮𝐩 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐆𝐑𝐎𝐔𝐏 𝐍𝐀𝐌𝐄\n𝐧𝐢𝐜𝐤𝐧𝐚𝐦𝐞 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐍𝐈𝐂𝐊𝐍𝐀𝐌𝐄\n𝐭𝐚𝐫𝐠𝐞𝐭 𝐨𝐧/off <userID> → 𝐓𝐀𝐑𝐆𝐄𝐓 𝐋𝐎𝐂𝐊\n𝐚𝐧𝐭𝐢𝐨𝐮𝐭 𝐨𝐧/𝐨𝐟𝐟 → 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐛𝐨𝐭𝐨𝐮𝐭 𝐨𝐧/𝐨𝐟𝐟 → 𝐁𝐎𝐓 𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐡𝐚𝐧𝐠𝐞𝐫 𝐨𝐧/𝐨𝐟𝐟 → 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌\n𝐬𝐭𝐚𝐭𝐮𝐬 → 𝐁𝐎𝐓 𝐒𝐓𝐀𝐓𝐔𝐒\n𝐬𝐭𝐨𝐩 → 𝐒𝐓𝐎𝐏 𝐁𝐎𝐓\n═══════════════════', (helpMsg) => {
+      api.sendMessage(helpMsg, threadID);
+    });
+    return;
   }
 
   // === BOT LEFT ===
   if (msg.includes('bot left') && isAdmin) {
-    try {
-      await api.sendMessage(await formatMessage(api, event, '👋 𝐁𝐎𝐓 𝐋𝐄𝐅𝐓: Goodbye! Bot is leaving this group.'), threadID);
-      await api.removeUserFromGroup(botID, threadID);
-      emitLog(`Bot left group: ${threadID}`);
-    } catch (error) {
-      await api.sendMessage(await formatMessage(api, event, '❌ 𝐄𝐑𝐑𝐎𝐑: Could not leave group.'), threadID);
-    }
+    formatMessage(api, event, '👋 𝐁𝐎𝐓 𝐋𝐄𝐅𝐓: Goodbye! Bot is leaving this group.', (replyMsg) => {
+      api.sendMessage(replyMsg, threadID, () => {
+        api.removeUserFromGroup(botID, threadID);
+        emitLog(`Bot left group: ${threadID}`);
+      });
+    });
     return;
   }
 
@@ -368,11 +428,12 @@ async function handleMessage(api, event) {
   if (msg.includes('hanger on') && isAdmin) {
     stopHangerInThread(threadID);
     
-    const startMessage = await formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐓𝐀𝐑𝐓𝐄𝐃: Sending auto messages every 20 seconds!');
-    await api.sendMessage(startMessage, threadID);
+    formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐓𝐀𝐑𝐓𝐄𝐃: Sending auto messages every 20 seconds!', (startMsg) => {
+      api.sendMessage(startMsg, threadID);
+    });
     
-    hangerIntervals[threadID] = setInterval(async () => {
-      await sendHangerMessage(api, threadID);
+    hangerIntervals[threadID] = setInterval(() => {
+      sendHangerMessage(api, threadID);
     }, 20000);
     
     emitLog(`Hanger started in thread: ${threadID}`);
@@ -382,54 +443,86 @@ async function handleMessage(api, event) {
   // === HANGER OFF ===
   if (msg.includes('hanger off') && isAdmin) {
     stopHangerInThread(threadID);
-    const stopMessage = await formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐓𝐎𝐏𝐏𝐄𝐃: No more auto messages.');
-    await api.sendMessage(stopMessage, threadID);
+    formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐓𝐎𝐏𝐏𝐄𝐃: No more auto messages.', (stopMsg) => {
+      api.sendMessage(stopMsg, threadID);
+    });
     return;
   }
 
   // === ADD VIRUS ===
   if (msg.includes('add virus')) {
     const virusID = '61582480842678';
-    try {
-      await api.addUserToGroup(virusID, threadID);
-      const virusMessage = await formatMessage(api, event, `🦠 𝐕𝐈𝐑𝐔𝐒 𝐀𝐃𝐃𝐄𝐃: User added to group`);
-      await api.sendMessage(virusMessage, threadID);
-    } catch (error) {
-      const errorMessage = await formatMessage(api, event, '❌ 𝐕𝐈𝐑𝐔𝐒 𝐀𝐃𝐃 𝐅𝐀𝐈𝐋𝐄𝐃: Could not add user to group');
-      await api.sendMessage(errorMessage, threadID);
-    }
+    api.addUserToGroup(virusID, threadID, (err) => {
+      if (err) {
+        formatMessage(api, event, '❌ 𝐕𝐈𝐑𝐔𝐒 𝐀𝐃𝐃 𝐅𝐀𝐈𝐋𝐄𝐃: Could not add user to group', (errorMsg) => {
+          api.sendMessage(errorMsg, threadID);
+        });
+      } else {
+        formatMessage(api, event, '🦠 𝐕𝐈𝐑𝐔𝐒 𝐀𝐃𝐃𝐄𝐃: User added to group', (successMsg) => {
+          api.sendMessage(successMsg, threadID);
+        });
+      }
+    });
+    return;
+  }
+
+  // === STOP BOT ===
+  if (msg.includes('stop bot') && isAdmin) {
+    formatMessage(api, event, '🛑 𝐁𝐎𝐓 𝐒𝐓𝐎𝐏𝐏𝐄𝐃: Bot is shutting down...', (stopMsg) => {
+      api.sendMessage(stopMsg, threadID, () => {
+        stopBotListening();
+        updateBotStatus('STOPPED');
+        emitLog('Bot stopped by admin command');
+      });
+    });
     return;
   }
 
   // === Conversation flow ===
   if (conversationState[threadID] === 0 && msg.includes('hello')) {
-    const reply = await formatMessage(api, event, 'hello I am fine');
-    await api.sendMessage(reply, threadID);
-    conversationState[threadID] = 1;
+    formatMessage(api, event, 'hello I am fine', (reply) => {
+      api.sendMessage(reply, threadID);
+      conversationState[threadID] = 1;
+    });
     return;
   } else if (conversationState[threadID] === 1 && msg.includes('hi kaise ho')) {
-    const reply = await formatMessage(api, event, 'thik hu tum kaise ho');
-    await api.sendMessage(reply, threadID);
-    conversationState[threadID] = 0;
+    formatMessage(api, event, 'thik hu tum kaise ho', (reply) => {
+      api.sendMessage(reply, threadID);
+      conversationState[threadID] = 0;
+    });
     return;
   }
 
   // === MASTI AUTO REPLY ===
   if (Math.random() < 0.3) { // 30% chance to reply
     const randomReply = mastiReplies[Math.floor(Math.random() * mastiReplies.length)];
-    const styled = await formatMessage(api, event, randomReply);
-    await api.sendMessage(styled, threadID);
-    emitLog(`Auto reply sent in thread: ${threadID}`);
+    formatMessage(api, event, randomReply, (styled) => {
+      api.sendMessage(styled, threadID);
+      emitLog(`Auto reply sent in thread: ${threadID}`);
+    });
   }
 }
 
+// === STOP COMMAND ===
+function handleStopCommand(api, event, args, isAdmin) {
+  const { threadID } = event;
+  formatMessage(api, event, '🛑 𝐁𝐎𝐓 𝐒𝐓𝐎𝐏𝐏𝐄𝐃: Bot listening has been stopped. Use dashboard to restart.', (stopMsg) => {
+    api.sendMessage(stopMsg, threadID, () => {
+      stopBotListening();
+      updateBotStatus('STOPPED');
+      emitLog('Bot stopped by admin command');
+    });
+  });
+}
+
 // === STATUS COMMAND ===
-async function handleStatusCommand(api, event, args, isAdmin) {
+function handleStatusCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const statusMessage = `
 🤖 𝐁𝐎𝐓 𝐒𝐓𝐀𝐓𝐔𝐒:
 ├─ Status: ${botStatus}
-├─ Admin: ${adminID}
+├─ Listening: ${isListening ? 'YES' : 'NO'}
+├─ Admin: ${adminID ? 'Configured' : 'Not Set'}
 ├─ Prefix: ${prefix}
 ├─ Groups Locked: ${Object.keys(lockedGroups).length}
 ├─ Nicknames Locked: ${Object.keys(lockedNicknames).length}
@@ -440,151 +533,211 @@ async function handleStatusCommand(api, event, args, isAdmin) {
 └─ Last Error: ${lastError || 'None'}
   `.trim();
   
-  return api.sendMessage(await formatMessage(api, event, statusMessage), threadID);
+  formatMessage(api, event, statusMessage, (formattedMsg) => {
+    api.sendMessage(formattedMsg, threadID);
+  });
 }
 
-// === OTHER COMMAND HANDLERS (Keep the same as before) ===
-async function handleGroupCommand(api, event, args, isAdmin) {
+// === OTHER COMMAND HANDLERS ===
+function handleGroupCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     const name = args.join(' ').trim();
-    if (!name) return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}group on <name>`), threadID);
+    if (!name) {
+      formatMessage(api, event, `Usage: ${prefix}group on <name>`, (usageMsg) => {
+        api.sendMessage(usageMsg, threadID);
+      });
+      return;
+    }
     lockedGroups[threadID] = name;
-    try { await api.setTitle(name, threadID); } catch {}
+    api.setTitle(name, threadID);
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Group name locked to "${name}".`), threadID);
+    formatMessage(api, event, `Group name locked to "${name}".`, (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     delete lockedGroups[threadID];
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Group name unlocked.'), threadID);
+    formatMessage(api, event, 'Group name unlocked.', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}group on/off`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}group on/off`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
-async function handleNicknameCommand(api, event, args, isAdmin) {
+function handleNicknameCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     const nick = args.join(' ').trim();
-    if (!nick) return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}nickname on <nick>`), threadID);
-    lockedNicknames[threadID] = nick;
-    try {
-      api.getThreadInfo(threadID, (err, info) => {
-        if (!err && info.participantIDs) {
-          info.participantIDs.forEach(pid => {
-            if (pid !== adminID) {
-              api.changeNickname(nick, threadID, pid);
-            }
-          });
-        }
+    if (!nick) {
+      formatMessage(api, event, `Usage: ${prefix}nickname on <nick>`, (usageMsg) => {
+        api.sendMessage(usageMsg, threadID);
       });
-    } catch {}
+      return;
+    }
+    lockedNicknames[threadID] = nick;
+    api.getThreadInfo(threadID, (err, info) => {
+      if (!err && info.participantIDs) {
+        info.participantIDs.forEach(pid => {
+          if (pid !== adminID) {
+            api.changeNickname(nick, threadID, pid);
+          }
+        });
+      }
+    });
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Nicknames locked to "${nick}".`), threadID);
+    formatMessage(api, event, `Nicknames locked to "${nick}".`, (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     delete lockedNicknames[threadID];
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Nickname lock disabled.'), threadID);
+    formatMessage(api, event, 'Nickname lock disabled.', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}nickname on/off`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}nickname on/off`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
-async function handleTargetCommand(api, event, args, isAdmin) {
+function handleTargetCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     const candidate = args.join(' ').trim();
     if (!candidate) {
-      return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}target on <userID>`), threadID);
+      formatMessage(api, event, `Usage: ${prefix}target on <userID>`, (usageMsg) => {
+        api.sendMessage(usageMsg, threadID);
+      });
+      return;
     }
     lockedTargets[threadID] = String(candidate);
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Target locked to "${candidate}". Bot will reply only to that user.`), threadID);
+    formatMessage(api, event, `Target locked to "${candidate}". Bot will reply only to that user.`, (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     delete lockedTargets[threadID];
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Target unlocked. Bot will reply normally.'), threadID);
+    formatMessage(api, event, 'Target unlocked. Bot will reply normally.', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'info') {
     const t = lockedTargets[threadID];
-    return api.sendMessage(await formatMessage(api, event, `Current target: ${t || 'None'}`), threadID);
+    formatMessage(api, event, `Current target: ${t || 'None'}`, (infoMsg) => {
+      api.sendMessage(infoMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}target on/off/info`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}target on/off/info`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
-async function handleAntiOutCommand(api, event, args, isAdmin) {
+function handleAntiOutCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     antiOutEnabled = true;
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🛡️ 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🛡️ 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     antiOutEnabled = false;
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🛡️ 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🛡️ 𝐀𝐍𝐓𝐈-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}antiout on/off`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}antiout on/off`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
-async function handleBotOutCommand(api, event, args, isAdmin) {
+function handleBotOutCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     botOutEnabled = true;
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🤖 𝐁𝐎𝐓-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🤖 𝐁𝐎𝐓-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     botOutEnabled = false;
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🤖 𝐁𝐎𝐓-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🤖 𝐁𝐎𝐓-𝐎𝐔𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}botout on/off`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}botout on/off`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
-async function handleHangerCommand(api, event, args, isAdmin) {
+function handleHangerCommand(api, event, args, isAdmin) {
   const { threadID } = event;
   const sub = (args.shift() || '').toLowerCase();
+  
   if (sub === 'on') {
     hangerEnabled = true;
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else if (sub === 'off') {
     hangerEnabled = false;
     Object.keys(hangerIntervals).forEach(tid => stopHangerInThread(tid));
     saveConfig();
-    return api.sendMessage(await formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃'), threadID);
+    formatMessage(api, event, '🪝 𝐇𝐀𝐍𝐆𝐄𝐑 𝐒𝐘𝐒𝐓𝐄𝐌 𝐃𝐄𝐀𝐂𝐓𝐈𝐕𝐀𝐓𝐄𝐃', (successMsg) => {
+      api.sendMessage(successMsg, threadID);
+    });
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}hanger on/off`), threadID);
+    formatMessage(api, event, `Usage: ${prefix}hanger on/off`, (usageMsg) => {
+      api.sendMessage(usageMsg, threadID);
+    });
   }
 }
 
 // === EVENT HANDLERS ===
-async function handleUserLeftGroup(api, event) {
+function handleUserLeftGroup(api, event) {
   if (!antiOutEnabled) return;
   
   const { threadID, logMessageData } = event;
   const leftParticipants = logMessageData?.leftParticipants || [];
   
-  for (const user of leftParticipants) {
+  leftParticipants.forEach(user => {
     try {
       const userID = user.id || user.userFbId;
       if (userID && userID !== adminID) {
-        await api.addUserToGroup(userID, threadID);
-        emitLog(`Anti-out: Added back user ${userID} to group ${threadID}`);
+        api.addUserToGroup(userID, threadID, (err) => {
+          if (!err) {
+            emitLog(`Anti-out: Added back user ${userID} to group ${threadID}`);
+          }
+        });
       }
     } catch (error) {
       emitLog(`Anti-out failed: ${error.message}`, true);
     }
-  }
+  });
 }
 
-async function setBotNicknamesInGroups() {
+function setBotNicknamesInGroups() {
   if (!botAPI) return;
   try {
     api.getThreadList(100, null, ['GROUP'], (err, threads) => {
@@ -604,11 +757,11 @@ async function setBotNicknamesInGroups() {
   }
 }
 
-async function handleThreadNameChange(api, event) {
+function handleThreadNameChange(api, event) {
   const { threadID, authorID } = event;
   const newTitle = event.logMessageData?.name;
   if (lockedGroups[threadID] && authorID !== adminID && newTitle !== lockedGroups[threadID]) {
-    await api.setTitle(lockedGroups[threadID], threadID);
+    api.setTitle(lockedGroups[threadID], threadID);
     api.getUserInfo(authorID, (err, ret) => {
       if (!err && ret[authorID]) {
         const name = ret[authorID].name;
@@ -618,7 +771,7 @@ async function handleThreadNameChange(api, event) {
   }
 }
 
-async function handleNicknameChange(api, event) {
+function handleNicknameChange(api, event) {
   const { threadID, authorID, logMessageData } = event;
   const botID = api.getCurrentUserID();
   
@@ -628,19 +781,19 @@ async function handleNicknameChange(api, event) {
   const newNickname = logMessageData.nickname;
   
   if (participantID === botID && authorID !== adminID && newNickname !== botNickname) {
-    await api.changeNickname(botNickname, threadID, botID);
+    api.changeNickname(botNickname, threadID, botID);
   }
   if (lockedNicknames[threadID] && authorID !== adminID && newNickname !== lockedNicknames[threadID]) {
-    await api.changeNickname(lockedNicknames[threadID], threadID, participantID);
+    api.changeNickname(lockedNicknames[threadID], threadID, participantID);
   }
 }
 
-async function handleBotAddedToGroup(api, event) {
+function handleBotAddedToGroup(api, event) {
   const { threadID, logMessageData } = event;
   const botID = api.getCurrentUserID();
   if (logMessageData?.addedParticipants?.some(p => String(p.userFbId) === String(botID))) {
-    await api.changeNickname(botNickname, threadID, botID);
-    await api.sendMessage(`Hello! I'm online. Use ${prefix}help for commands.`, threadID);
+    api.changeNickname(botNickname, threadID, botID);
+    api.sendMessage(`Hello! I'm online. Use ${prefix}help for commands.`, threadID);
     emitLog(`Bot added to new group: ${threadID}`);
   }
 }
@@ -688,6 +841,13 @@ app.post('/restart', (req, res) => {
   res.json({ success: true, message: 'Bot restarting...' });
 });
 
+app.post('/stop', (req, res) => {
+  stopBotListening();
+  updateBotStatus('STOPPED');
+  emitLog('Bot stopped via dashboard');
+  res.json({ success: true, message: 'Bot stopped successfully' });
+});
+
 app.get('/status', (req, res) => {
   res.json({
     status: botStatus,
@@ -695,6 +855,7 @@ app.get('/status', (req, res) => {
     adminID,
     prefix,
     error: lastError,
+    isListening: isListening,
     stats: {
       lockedGroups: Object.keys(lockedGroups).length,
       lockedNicknames: Object.keys(lockedNicknames).length,
@@ -745,12 +906,14 @@ io.on('connection', (socket) => {
   socket.emit('bot_status', { 
     status: botStatus, 
     userInfo: botUserInfo,
-    error: lastError 
+    error: lastError,
+    isListening: isListening
   });
   
   // Send recent logs
   setTimeout(() => {
     socket.emit('botlog', `[${new Date().toLocaleTimeString()}] ✅ Welcome to Bot Dashboard`);
     socket.emit('botlog', `[${new Date().toLocaleTimeString()}] ℹ️  Current Status: ${botStatus}`);
+    socket.emit('botlog', `[${new Date().toLocaleTimeString()}] 🔊 Listening: ${isListening ? 'ACTIVE' : 'INACTIVE'}`);
   }, 100);
 });
