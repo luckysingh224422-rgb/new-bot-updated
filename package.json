@@ -1,21 +1,15 @@
 {
   "name": "facebook-bot",
-  "version": "1.0.0",
-  "description": "Facebook Messenger Bot - Fixed Version",
-  "main": "index.js",
+  "version": "1.0.0", 
+  "description": "Working Facebook Bot",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "facebook-chat-api": "1.6.0",
+    "@open-wa/wa-automate": "^4.0.4",
     "socket.io": "^4.7.2",
-    "path": "^0.12.7",
     "axios": "^1.5.0"
-  },
-  "engines": {
-    "node": ">=14.0.0"
   }
 }
