@@ -1,31 +1,22 @@
 {
-  "name": "legend-prince-bot",
+  "name": "aman-bot",
   "version": "1.0.0",
-  "description": "Facebook Messenger Bot with Group Management Features",
-  "main": "clean_bot_full.js",
+  "description": "Facebook Messenger Aman Bot using ws3-fca and Express",
+  "main": "index.js",
   "scripts": {
-    "start": "node clean_bot_full.js",
-    "dev": "nodemon clean_bot_full.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
-  "keywords": [
-    "facebook",
-    "bot",
-    "messenger",
-    "automation"
-  ],
-  "author": "Legend Prince",
-  "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "body-parser": "^1.20.2",
-    "ws3-fca": "^1.0.1",
-    "socket.io": "^4.7.2",
-    "path": "^0.12.7"
+    "express": "^4.18.2",
+    "ws3-fca": "^1.0.0",
+    "socket.io": "^4.7.1",
+    "npmlog": "^6.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.0"
   },
-  "engines": {
-    "node": ">=14.0.0"
-  }
-}
+  "author": "Aman inxide",
+  "license": "MIT"
+}  
