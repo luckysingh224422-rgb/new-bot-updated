@@ -1,7 +1,7 @@
 {
   "name": "facebook-bot",
   "version": "1.0.0",
-  "description": "Facebook Messenger Bot with advanced features",
+  "description": "Facebook Messenger Bot with Live Console",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -12,7 +12,8 @@
     "body-parser": "^1.20.2",
     "facebook-chat-api": "^1.8.0",
     "socket.io": "^4.7.2",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "axios": "^1.5.0"
   },
   "engines": {
     "node": ">=14.0.0"
