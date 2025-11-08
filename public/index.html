@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Dashboard - Live Console</title>
+    <title>Bot Dashboard - Fixed Version</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -29,10 +29,6 @@
         .header h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
-        }
-        .header .subtitle {
-            opacity: 0.8;
-            font-size: 1.1em;
         }
         .content {
             display: grid;
@@ -66,48 +62,40 @@
             font-weight: 600;
             color: #2c3e50;
         }
-        input, textarea, select {
+        input, textarea {
             width: 100%;
             padding: 12px;
             border: 2px solid #e9ecef;
             border-radius: 8px;
             font-size: 14px;
-            transition: border-color 0.3s;
-        }
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: #3498db;
         }
         textarea {
             min-height: 120px;
             font-family: monospace;
-            resize: vertical;
         }
         .btn {
             background: linear-gradient(135deg, #3498db, #2980b9);
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 15px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
             width: 100%;
             margin: 5px 0;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
-        }
-        .btn-success {
-            background: linear-gradient(135deg, #27ae60, #219a52);
-        }
-        .btn-warning {
-            background: linear-gradient(135deg, #f39c12, #e67e22);
-        }
-        .btn-danger {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        .btn-success { background: linear-gradient(135deg, #27ae60, #219a52); }
+        .btn-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
+        .btn-danger { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .log-container {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
         }
         .status-indicator {
             display: inline-block;
@@ -125,69 +113,19 @@
             50% { opacity: 0.5; }
             100% { opacity: 1; }
         }
-        .log-container {
-            background: #1e1e1e;
-            color: #00ff00;
-            padding: 20px;
-            border-radius: 8px;
-            height: 400px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        .log-entry {
-            margin-bottom: 5px;
-            padding: 2px 0;
-        }
-        .log-entry.error { color: #ff4444; }
-        .log-entry.info { color: #00ff00; }
-        .log-entry.warning { color: #ffaa00; }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
-        }
-        .stat-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            border-left: 4px solid #3498db;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .stat-number {
-            font-size: 2em;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        .stat-label {
-            font-size: 0.9em;
-            color: #7f8c8d;
-            margin-top: 5px;
-        }
-        .bot-info {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-            border-left: 4px solid #27ae60;
-        }
         .alert {
             padding: 15px;
             border-radius: 8px;
             margin: 15px 0;
-            border-left: 4px solid;
         }
         .alert-error {
             background: #ffeaea;
-            border-left-color: #e74c3c;
+            border-left: 4px solid #e74c3c;
             color: #c0392b;
         }
         .alert-success {
             background: #eaffea;
-            border-left-color: #27ae60;
+            border-left: 4px solid #27ae60;
             color: #219a52;
         }
         .control-buttons {
@@ -201,30 +139,29 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🤖 Bot Dashboard</h1>
-            <div class="subtitle">Live Console & Control Panel</div>
+            <h1>🤖 Bot Dashboard - FIXED</h1>
+            <div>Connection Issues Resolved ✅</div>
         </div>
         
         <div class="content">
-            <!-- Configuration Panel -->
             <div class="panel">
                 <h2>⚙️ Configuration</h2>
                 <form id="configForm">
                     <div class="form-group">
                         <label for="prefix">Command Prefix</label>
-                        <input type="text" id="prefix" value="/" placeholder="e.g., / or !">
+                        <input type="text" id="prefix" value="/" placeholder="e.g., /">
                     </div>
                     
                     <div class="form-group">
-                        <label for="adminID">Admin Facebook ID *</label>
-                        <input type="text" id="adminID" required placeholder="Your Facebook Numeric ID">
+                        <label for="adminID">Your Facebook ID *</label>
+                        <input type="text" id="adminID" required placeholder="Your numeric Facebook ID">
                     </div>
                     
                     <div class="form-group">
-                        <label for="cookies">Facebook Cookies (JSON Array) *</label>
-                        <textarea id="cookies" required placeholder='Paste your Facebook cookies as JSON array: [{"key":"value"},...]'></textarea>
-                        <small style="color: #666; margin-top: 5px; display: block;">
-                            Get cookies from browser dev tools → Application → Cookies → https://facebook.com
+                        <label for="cookies">Facebook Cookies (JSON) *</label>
+                        <textarea id="cookies" required placeholder='Paste cookies as JSON array: [{"key":"value"},...]'></textarea>
+                        <small style="color: #666;">
+                            Get from browser: F12 → Application → Cookies → facebook.com
                         </small>
                     </div>
                     
@@ -232,30 +169,26 @@
                 </form>
 
                 <div class="control-buttons">
-                    <button type="button" class="btn btn-warning" onclick="restartBot()">🔄 Restart Bot</button>
-                    <button type="button" class="btn" onclick="clearLogs()">🗑️ Clear Logs</button>
+                    <button type="button" class="btn btn-warning" onclick="restartBot()">🔄 Restart</button>
+                    <button type="button" class="btn btn-danger" onclick="stopBot()">🛑 Stop</button>
                 </div>
 
                 <div id="statusAlert"></div>
 
-                <!-- Bot Status -->
-                <div class="bot-info" id="botInfo" style="display: none;">
+                <div id="botInfo" style="margin-top: 20px; padding: 15px; background: white; border-radius: 8px; display: none;">
                     <h3>🤖 Bot Status</h3>
                     <div id="statusDisplay"></div>
-                    <div class="stats-grid" id="statsGrid"></div>
                 </div>
             </div>
 
-            <!-- Live Console -->
             <div class="panel">
                 <h2>📊 Live Console</h2>
                 <div class="log-container" id="logContainer">
-                    <div class="log-entry info">🚀 Console initialized. Waiting for logs...</div>
+                    <div>🚀 Console initialized...</div>
                 </div>
                 
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <div style="margin-top: 15px;">
                     <button class="btn" onclick="clearLogs()">🗑️ Clear Logs</button>
-                    <button class="btn" onclick="exportLogs()">📥 Export Logs</button>
                 </div>
             </div>
         </div>
@@ -268,108 +201,51 @@
         const statusAlert = document.getElementById('statusAlert');
         const botInfo = document.getElementById('botInfo');
         const statusDisplay = document.getElementById('statusDisplay');
-        const statsGrid = document.getElementById('statsGrid');
 
-        // Socket event handlers
         socket.on('botlog', (msg) => {
-            addLogEntry(msg);
+            const logEntry = document.createElement('div');
+            logEntry.style.marginBottom = '5px';
+            logEntry.style.padding = '2px 0';
+            
+            if (msg.includes('ERROR') || msg.includes('❌')) {
+                logEntry.style.color = '#ff4444';
+            } else if (msg.includes('WARNING') || msg.includes('⚠️')) {
+                logEntry.style.color = '#ffaa00';
+            } else {
+                logEntry.style.color = '#00ff00';
+            }
+            
+            logEntry.textContent = msg;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
         });
 
         socket.on('bot_status', (data) => {
-            updateBotStatus(data);
-        });
-
-        function addLogEntry(message) {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
+            botInfo.style.display = 'block';
             
-            if (message.includes('ERROR') || message.includes('❌')) {
-                logEntry.className += ' error';
-            } else if (message.includes('WARNING') || message.includes('⚠️')) {
-                logEntry.className += ' warning';
-            } else {
-                logEntry.className += ' info';
-            }
-            
-            logEntry.textContent = message;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-
-        function updateBotStatus(data) {
             const statusColors = {
                 'ONLINE': 'status-online',
-                'OFFLINE': 'status-offline',
+                'OFFLINE': 'status-offline', 
                 'ERROR': 'status-error',
                 'CONNECTING': 'status-connecting',
                 'LISTENING': 'status-online',
-                'CONFIG_NEEDED': 'status-offline'
+                'STOPPED': 'status-offline'
             };
 
-            const statusTexts = {
-                'ONLINE': '🟢 Online',
-                'OFFLINE': '⚫ Offline',
-                'ERROR': '🔴 Error',
-                'CONNECTING': '🟡 Connecting...',
-                'LISTENING': '🔵 Listening',
-                'CONFIG_NEEDED': '⚪ Configuration Needed'
-            };
-
-            botInfo.style.display = 'block';
+            let html = `<div><strong>Status:</strong> <span class="status-indicator ${statusColors[data.status]}"></span> ${data.status}</div>`;
             
-            let statusHTML = `
-                <div style="margin-bottom: 15px;">
-                    <strong>Status:</strong> 
-                    <span class="status-indicator ${statusColors[data.status] || 'status-offline'}"></span>
-                    ${statusTexts[data.status] || data.status}
-                </div>
-            `;
-
             if (data.userInfo) {
-                statusHTML += `
-                    <div style="margin-bottom: 10px;">
-                        <strong>Bot Name:</strong> ${data.userInfo.name}
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <strong>Bot ID:</strong> ${data.userInfo.id}
-                    </div>
-                `;
+                html += `<div><strong>Bot:</strong> ${data.userInfo.name}</div>`;
+                html += `<div><strong>ID:</strong> ${data.userInfo.id}</div>`;
             }
-
+            
             if (data.error) {
-                statusHTML += `
-                    <div class="alert alert-error">
-                        <strong>Last Error:</strong> ${data.error}
-                    </div>
-                `;
+                html += `<div class="alert alert-error"><strong>Error:</strong> ${data.error}</div>`;
             }
+            
+            statusDisplay.innerHTML = html;
+        });
 
-            statusDisplay.innerHTML = statusHTML;
-
-            // Update stats
-            if (data.stats) {
-                statsGrid.innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-number">${data.stats.lockedGroups}</div>
-                        <div class="stat-label">Locked Groups</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${data.stats.lockedNicknames}</div>
-                        <div class="stat-label">Locked Nicknames</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${data.stats.lockedTargets}</div>
-                        <div class="stat-label">Locked Targets</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${data.adminID ? '✅' : '❌'}</div>
-                        <div class="stat-label">Admin Configured</div>
-                    </div>
-                `;
-            }
-        }
-
-        // Form submission
         document.getElementById('configForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -387,69 +263,40 @@
                 });
                 
                 const result = await response.json();
-                
-                if (result.success) {
-                    showAlert('✅ ' + result.message, 'success');
-                } else {
-                    showAlert('❌ ' + result.error, 'error');
-                }
+                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
             } catch (error) {
-                showAlert('❌ Network error: ' + error.message, 'error');
+                showAlert('❌ Network error: ' + error.message, false);
             }
         });
 
         async function restartBot() {
             try {
-                const response = await fetch('/restart', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
+                const response = await fetch('/restart', { method: 'POST' });
                 const result = await response.json();
-                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, 
-                         result.success ? 'success' : 'error');
+                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
             } catch (error) {
-                showAlert('❌ Network error: ' + error.message, 'error');
+                showAlert('❌ Network error', false);
+            }
+        }
+
+        async function stopBot() {
+            try {
+                const response = await fetch('/stop', { method: 'POST' });
+                const result = await response.json();
+                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
+            } catch (error) {
+                showAlert('❌ Network error', false);
             }
         }
 
         function clearLogs() {
-            logContainer.innerHTML = '<div class="log-entry info">🗑️ Logs cleared</div>';
+            logContainer.innerHTML = '<div>🗑️ Logs cleared</div>';
         }
 
-        function exportLogs() {
-            const logs = logContainer.innerText;
-            const blob = new Blob([logs], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `bot-logs-${new Date().toISOString().split('T')[0]}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
+        function showAlert(message, isSuccess) {
+            statusAlert.innerHTML = `<div class="alert ${isSuccess ? 'alert-success' : 'alert-error'}">${message}</div>`;
+            setTimeout(() => statusAlert.innerHTML = '', 5000);
         }
-
-        function showAlert(message, type) {
-            statusAlert.innerHTML = `
-                <div class="alert alert-${type}">
-                    ${message}
-                </div>
-            `;
-            setTimeout(() => {
-                statusAlert.innerHTML = '';
-            }, 5000);
-        }
-
-        // Load initial status
-        fetch('/status')
-            .then(response => response.json())
-            .then(data => updateBotStatus(data))
-            .catch(error => {
-                console.error('Failed to load initial status:', error);
-            });
-
-        // Add welcome message
-        addLogEntry(`[${new Date().toLocaleTimeString()}] 🚀 Dashboard connected successfully`);
-        addLogEntry(`[${new Date().toLocaleTimeString()}] 📡 Ready to configure and monitor your bot`);
     </script>
 </body>
 </html>
