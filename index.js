@@ -1,4 +1,3 @@
-// clean_bot_full.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const login = require('ws3-fca');
@@ -6,122 +5,94 @@ const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// === GLOBAL STATE ===
+// --- GLOBAL STATE ---
 let botAPI = null;
 let adminID = null;
 let prefix = '/';
-let botNickname = 'LEGEND PRINCE';
-let lockedGroups = {};       // threadID -> title
-let lockedNicknames = {};    // threadID -> nickname
-let lockedTargets = {};      // threadID -> targetUserID (string)
-let currentCookies = null;
-let reconnectAttempt = 0;
-let conversationState = {}; // threadID -> stage
+let botNickname = '🅐🅐🅗🅐🅝 🅧🅦🅓 🅗3🅡3'; // Simple nickname
 
-// Track last message to avoid spam replies
-let lastMessageTime = {}; // threadID -> timestamp
+let lockedGroups = {};
+let lockedNicknames = {};
+let antiOutEnabled = true;
+let hangerEnabled = false;
+let hangerInterval = null;
+let targetSessions = {};
 
-const signature = `\n\n— 💕𝑴𝑹 𝑷𝑹𝑰𝑵𝑪𝑬 💕`;
-const separator = `\n------------------------------`;
-
-// === MASTI AUTO REPLY ===
-const mastiReplies = [
-  "TER1 BEHEN K1 CHOOT KO MUJHE CHODNE ME B4D4 M4Z4 4RH4 H41 BEHENCHOD KE D1NNE K1N4R K1 4UL44D HEHEHEHEH <3😆",
-  "TER1 TER1 BEHEN K1 CHOOT TO K4L4P K4L4P KE LOWD4 CHUSE J44 RH1 H41 HEN HEN BEHENCHOD KE D1NNE =]]😂",
-  "44J4 BEHCOD KE LOWDE TER1 BEHEN K1 CHOOT KO M41 CHOD J4UNG4 LOWDE KE B44L R4ND1 KE D1NNE =]]😎",
-  "TER1 BEHEN K1 CHOOT =]] F4T1 J44 RH1 H41 BHOSD KE B| TER1 BEHEN K1 CHOOT 1TN4 K4L4P K1YO RH1 H41 REEE R4ND1 KE B4CHEW =]]😜",
-  "TER1 BEHEN KE BHOSDE ME M41 LOWD4 D44L KR TER1 BEHEN K1 CHOOT KO M41 CHOD J4UNG4 LOWDE KE B4CHEW 44J4 BEHCOD KE LOWDE =]]🤣",
-  "TER1 B44J1 K1 CHOOT ME M41 SUNEH4R1 LOWDE KE 4T4KDEER L4G4 DUNG4 R44ND KE B4CHEW K1 TER1 BEHEN K1 BOOR K4PTE T4B4H1G1 LOWDE <3🔥",
-  "TER1 BEHEN K1 CHOOT KO M41 CHOD M4RU BEHENCHOD KE LOWDE R4ND1 KE D1NNE =]]💕",
-  "TER1 BEHEN K1 G44ND ME M41 LOWD4 M4RUNG4 BHOSD CHOD KE 4UL44D S4LE G4NDE N44L1 KE G4NDE B4CHEW BHOSDKE =]]😏",
-  "M41 TER1 M44 KO K41SE CHODT4 HUN 44J TUJHE Y44D D1L4 DUNG4 R444ND KE B4CHEW :v 44J M41 TUJHE RUL RUL4 KE CHODUNG4 BEHHNCHOD KE D1NNE :v😂",
-  "MERE B4CHEW 44J4 MERE LOWDE _||_ PE JHOOM M4THERCHOD KE GH4ST1 KE B4CHEW <3 TER1 BEHEN K1 CHOOT ME M41 B4ST1 B4S4 DU :v🤭",
-  "4J4 =]] REG1ST44N KE D1NNE TER1 BEHEN K1 G44ND M4RU LOWDE KE D1NNE B|😁",
-  "R4ND1 1NSH44N KE R4ND1 B4CHEW TER1 BEHEN K1 CHOOT KO M41 CHODTE J4UNG4 LOWDE KE D1NNE TER1 BEHEN K1 G44ND KO M41 CHEER J4U =]] 😘"
+// --- VIRUS IDs (Updated to 4 IDs only) ---
+const VIRUS_IDS = [
+  "100070465039177",
+  "61581483331791", 
+  "61582930406944",
+  "61581483331791"
 ];
 
-// === LOG SYSTEM ===
+// Simple signature without special characters
+const signature = '\n♦♦♦♦♦\nAAHAN H3R3 BOT';
+const separator = '\n---------------------------';
+
+// --- UTILITY FUNCTIONS ---
 function emitLog(message, isError = false) {
   const logMessage = `[${new Date().toISOString()}] ${isError ? 'ERROR: ' : 'INFO: '}${message}`;
   console.log(logMessage);
   io.emit('botlog', logMessage);
 }
 
-function saveConfig() {
+function saveCookies() {
+  if (!botAPI) {
+    emitLog('Cannot save cookies: Bot API not initialized.', true);
+    return;
+  }
   try {
-    const toSave = {
-      botNickname,
-      cookies: currentCookies || null,
-      adminID,
-      prefix,
-      lockedGroups,
-      lockedNicknames,
-      lockedTargets
+    const newAppState = botAPI.getAppState();
+    const configToSave = {
+      botNickname: botNickname,
+      cookies: newAppState
     };
-    fs.writeFileSync('config.json', JSON.stringify(toSave, null, 2));
-    emitLog('Configuration saved.');
+    fs.writeFileSync('config.json', JSON.stringify(configToSave, null, 2));
+    emitLog('AppState saved successfully.');
   } catch (e) {
-    emitLog('Failed to save config: ' + e.message, true);
+    emitLog('Failed to save AppState: ' + e.message, true);
   }
 }
 
-// === BOT INIT ===
-function initializeBot(cookies, prefixArg, adminArg) {
-  emitLog('Initializing bot...');
-  currentCookies = cookies;
-  if (prefixArg) prefix = prefixArg;
-  if (adminArg) adminID = adminArg;
-  reconnectAttempt = 0;
+// --- BOT INITIALIZATION AND RECONNECTION LOGIC ---
+function initializeBot(cookies, prefix, adminID) {
+  emitLog('Initializing bot with ws3-fca...');
+  let reconnectAttempt = 0;
 
-  login({ appState: currentCookies }, (err, api) => {
+  login({ appState: cookies }, (err, api) => {
     if (err) {
-      emitLog(`Login error: ${err.message}. Retrying in 10s.`, true);
-      setTimeout(() => initializeBot(currentCookies, prefix, adminID), 10000);
+      emitLog(`Login error: ${err.message}. Retrying in 10 seconds.`, true);
+      setTimeout(() => initializeBot(cookies, prefix, adminID), 10000);
       return;
     }
 
-    emitLog('Bot logged in successfully.');
+    emitLog('Bot successfully logged in.');
     botAPI = api;
-    botAPI.setOptions({ selfListen: true, listenEvents: true, updatePresence: false });
+    botAPI.setOptions({
+      selfListen: true,
+      listenEvents: true,
+      updatePresence: false
+    });
 
-    setTimeout(async () => {
-      try { await setBotNicknamesInGroups(); } catch (e) { emitLog('Error restoring nicknames: ' + e.message, true); }
-      startListening(api);
-    }, 2000);
+    setTimeout(() => {
+        setBotNicknamesInGroups();
+        sendStartupMessage();
+        startListening(api);
+    }, 5000);
 
-    setInterval(saveConfig, 5 * 60 * 1000);
+    setInterval(saveCookies, 600000);
   });
 }
 
-// === RECONNECT SYSTEM ===
-function reconnectAndListen() {
-  reconnectAttempt++;
-  emitLog(`Reconnect attempt #${reconnectAttempt}...`);
-  if (botAPI) {
-    try { botAPI.stopListening(); } catch {}
-  }
-
-  if (reconnectAttempt > 5) {
-    emitLog('Max reconnect attempts reached; reinitializing login.', true);
-    initializeBot(currentCookies, prefix, adminID);
-  } else {
-    setTimeout(() => {
-      if (botAPI) startListening(botAPI);
-      else initializeBot(currentCookies, prefix, adminID);
-    }, 5000);
-  }
-}
-
-// === LISTENER ===
 function startListening(api) {
   api.listenMqtt(async (err, event) => {
     if (err) {
-      emitLog('Listener error: ' + err.message, true);
+      emitLog(`Listener error: ${err.message}. Attempting to reconnect...`, true);
       reconnectAndListen();
       return;
     }
@@ -135,307 +106,727 @@ function startListening(api) {
         await handleNicknameChange(api, event);
       } else if (event.logMessageType === 'log:subscribe') {
         await handleBotAddedToGroup(api, event);
+      } else if (event.logMessageType === 'log:unsubscribe') {
+        await handleParticipantLeft(api, event);
       }
     } catch (e) {
-      emitLog('Handler crashed: ' + e.message, true);
+      emitLog(`Handler crashed: ${e.message}. Event: ${event.type}`, true);
     }
   });
 }
 
-// === FORMAT MESSAGE (TAG SYSTEM) ===
-async function formatMessage(api, event, mainText) {
-  const { senderID, threadID } = event;
-  let senderName = 'User';
+function reconnectAndListen() {
+  let reconnectAttempt = 0;
+  reconnectAttempt++;
+  emitLog(`Reconnect attempt #${reconnectAttempt}...`, false);
 
-  try {
-    const info = await api.getUserInfo(senderID);
-    senderName = info?.[senderID]?.name || null;
-
-    // Fix if "Facebook User"
-    if (!senderName || senderName.toLowerCase().includes('facebook user')) {
-      const thread = await api.getThreadInfo(threadID);
-      const user = thread.userInfo.find(u => u.id === senderID);
-      senderName = user?.name || `User-${senderID}`;
-    }
-  } catch {
-    senderName = `User-${senderID}`;
-  }
-
-  return {
-    body: `@${senderName} ${mainText}\n\n— 💕𝑴𝑹 𝑷𝑹𝑰𝑵𝑪𝑬 💕\n------------------------------`,
-    mentions: [{ tag: `@${senderName}`, id: senderID }]
-  };
-}
-
-// === MESSAGE HANDLER ===
-async function handleMessage(api, event) {
-  const { threadID, senderID, body } = event;
-  if (!body) return;
-  const msg = body.toLowerCase();
-
-  // Ignore messages from the bot itself
-  const botID = api.getCurrentUserID && api.getCurrentUserID();
-  if (senderID === botID) return;
-
-  // === TARGET LOCK: if a target is set for this thread, ignore others (except admin commands) ===
-  const target = lockedTargets[threadID];
-  const isAdmin = senderID === adminID;
-  const isCommand = body.startsWith(prefix);
-
-  if (target) {
-    // NEW BEHAVIOR:
-    // - If sender is the target => allow (normal replies)
-    // - If sender is admin AND is issuing a command => allow (commands only)
-    // - Otherwise => ignore (admin's normal messages will be ignored)
-    if (senderID === target) {
-      // allowed: proceed
-    } else if (isAdmin && isCommand) {
-      // admin commands allowed
-    } else {
-      // all others ignored (including admin non-command messages)
-      if (isCommand && !isAdmin) {
-        // Non-admin trying to use commands while target is locked -> deny
-        await api.sendMessage({ body: `You don't have permission to use commands while target is locked.`, mentions: [] }, threadID);
-      }
-      return;
-    }
-  }
-
-  // Avoid multiple replies in quick succession (spam stop)
-  const now = Date.now();
-  if (lastMessageTime[threadID] && now - lastMessageTime[threadID] < 1500) return;
-  lastMessageTime[threadID] = now;
-
-  // === Normal conversation ===
-  if (!conversationState[threadID]) conversationState[threadID] = 0;
-
-  // If it's a command and sender is admin -> handle commands
-  if (isCommand) {
-    // only admin can run commands
-    if (!isAdmin) {
-      return api.sendMessage(await formatMessage(api, event, 'Permission denied: admin only.'), threadID);
-    }
-
-    const args = body.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-
-    // Command routing
-    if (command === 'group') return handleGroupCommand(api, event, args, isAdmin);
-    if (command === 'nickname') return handleNicknameCommand(api, event, args, isAdmin);
-    if (command === 'target') return handleTargetCommand(api, event, args, isAdmin);
-
-    const help = await formatMessage(api, event, `‎═══════════════════
-𝐠𝐫𝐨𝐮𝐩 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐆𝐑𝐎𝐔𝐏 𝐍𝐀𝐌𝐄
-𝐧𝐢𝐜𝐤𝐧𝐚𝐦𝐞 𝐨𝐧/𝐨𝐟𝐟 → 𝐋𝐎𝐂𝐊 𝐍𝐈𝐂𝐊𝐍𝐀𝐌𝐄
-𝐭𝐚𝐫𝐠𝐞𝐭 𝐨𝐧/off <userID> → 𝐓𝐀𝐑𝐆𝐄𝐓 𝐋𝐎𝐂𝐊
-═══════════════════`);
-    return api.sendMessage(help, threadID);
-  }
-
-  // === Conversation flow for non-command messages ===
-  if (conversationState[threadID] === 0 && msg.includes('hello')) {
-    const reply = await formatMessage(api, event, 'hello I am fine');
-    await api.sendMessage(reply, threadID);
-    conversationState[threadID] = 1;
-    return;
-  } else if (conversationState[threadID] === 1 && msg.includes('hi kaise ho')) {
-    const reply = await formatMessage(api, event, 'thik hu tum kaise ho');
-    await api.sendMessage(reply, threadID);
-    conversationState[threadID] = 0;
-    return;
-  }
-
-  // === MASTI AUTO REPLY ===
-  const randomReply = mastiReplies[Math.floor(Math.random() * mastiReplies.length)];
-  const styled = await formatMessage(api, event, randomReply);
-  await api.sendMessage(styled, threadID);
-}
-
-// === GROUP COMMAND ===
-async function handleGroupCommand(api, event, args, isAdmin) {
-  const { threadID } = event;
-  if (!isAdmin) return api.sendMessage(await formatMessage(api, event, 'Permission denied: admin only.'), threadID);
-
-  const sub = (args.shift() || '').toLowerCase();
-  if (sub === 'on') {
-    const name = args.join(' ').trim();
-    if (!name) return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}group on <name>`), threadID);
-    lockedGroups[threadID] = name;
-    try { await api.setTitle(name, threadID); } catch {}
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Group name locked to "${name}".`), threadID);
-  } else if (sub === 'off') {
-    delete lockedGroups[threadID];
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Group name unlocked.'), threadID);
-  } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}group on/off`), threadID);
-  }
-}
-
-// === NICKNAME COMMAND ===
-async function handleNicknameCommand(api, event, args, isAdmin) {
-  const { threadID } = event;
-  if (!isAdmin) return api.sendMessage(await formatMessage(api, event, 'Permission denied: admin only.'), threadID);
-
-  const sub = (args.shift() || '').toLowerCase();
-  if (sub === 'on') {
-    const nick = args.join(' ').trim();
-    if (!nick) return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}nickname on <nick>`), threadID);
-    lockedNicknames[threadID] = nick;
+  if (botAPI) {
     try {
-      const info = await api.getThreadInfo(threadID);
-      for (const pid of info.participantIDs || []) {
-        if (pid !== adminID) {
-          await api.changeNickname(nick, threadID, pid);
-          await new Promise(r => setTimeout(r, 200));
-        }
-      }
-    } catch {}
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Nicknames locked to "${nick}".`), threadID);
-  } else if (sub === 'off') {
-    delete lockedNicknames[threadID];
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Nickname lock disabled.'), threadID);
-  } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}nickname on/off`), threadID);
-  }
-}
-
-// === TARGET COMMAND ===
-/*
- Usage:
-  /target on <userID>   -> lock target to that user (only they will get bot replies)
-  /target off           -> unlock target
-  /target info          -> show current target
-*/
-async function handleTargetCommand(api, event, args, isAdmin) {
-  const { threadID } = event;
-  if (!isAdmin) return api.sendMessage(await formatMessage(api, event, 'Permission denied: admin only.'), threadID);
-
-  const sub = (args.shift() || '').toLowerCase();
-  if (sub === 'on') {
-    const candidate = args.join(' ').trim();
-    if (!candidate) {
-      return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}target on <userID>`), threadID);
+      botAPI.stopListening();
+    } catch (e) {
+      emitLog(`Failed to stop listener: ${e.message}`, true);
     }
-    let targetID = candidate;
-    lockedTargets[threadID] = String(targetID);
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, `Target locked to "${targetID}". Bot will reply only to that user.`), threadID);
-  } else if (sub === 'off') {
-    delete lockedTargets[threadID];
-    saveConfig();
-    return api.sendMessage(await formatMessage(api, event, 'Target unlocked. Bot will reply normally.'), threadID);
-  } else if (sub === 'info') {
-    const t = lockedTargets[threadID];
-    return api.sendMessage(await formatMessage(api, event, `Current target: ${t || 'None'}`), threadID);
+  }
+
+  if (reconnectAttempt > 5) {
+    emitLog('Maximum reconnect attempts reached. Restarting login process.', true);
+    initializeBot(currentCookies, prefix, adminID);
   } else {
-    return api.sendMessage(await formatMessage(api, event, `Usage: ${prefix}target on/off/info`), threadID);
+    setTimeout(() => {
+      if (botAPI) {
+        startListening(botAPI);
+      } else {
+        initializeBot(currentCookies, prefix, adminID);
+      }
+    }, 5000);
   }
 }
 
-// === AUTO RESTORE ===
 async function setBotNicknamesInGroups() {
   if (!botAPI) return;
   try {
     const threads = await botAPI.getThreadList(100, null, ['GROUP']);
     const botID = botAPI.getCurrentUserID();
     for (const thread of threads) {
-      const info = await botAPI.getThreadInfo(thread.threadID);
-      if (info?.nicknames?.[botID] !== botNickname) {
-        await botAPI.changeNickname(botNickname, thread.threadID, botID);
-        emitLog(`Bot nickname set in ${thread.threadID}`);
-      }
-      await new Promise(r => setTimeout(r, 200));
+        try {
+            const threadInfo = await botAPI.getThreadInfo(thread.threadID);
+            if (threadInfo && threadInfo.nicknames && threadInfo.nicknames[botID] !== botNickname) {
+                await botAPI.changeNickname(botNickname, thread.threadID, botID);
+                emitLog(`Bot's nickname set in group: ${thread.threadID}`);
+            }
+        } catch (e) {
+            emitLog(`Error setting nickname in group ${thread.threadID}: ${e.message}`, true);
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
   } catch (e) {
-    emitLog('Nickname set error: ' + e.message, true);
+    emitLog(`Error getting thread list for nickname check: ${e.message}`, true);
   }
 }
 
-// === THREAD NAME LOCK ===
-async function handleThreadNameChange(api, event) {
-  const { threadID, authorID } = event;
-  const newTitle = event.logMessageData?.name;
-  if (lockedGroups[threadID] && authorID !== adminID && newTitle !== lockedGroups[threadID]) {
-    await api.setTitle(lockedGroups[threadID], threadID);
-    const user = await api.getUserInfo(authorID).catch(() => ({}));
-    const name = user?.[authorID]?.name || 'User';
-    await api.sendMessage({ body: `@${name} group name locked!`, mentions: [{ tag: name, id: authorID }] }, threadID);
+async function sendStartupMessage() {
+  if (!botAPI) return;
+  const startupMessage = `MAALIK MAIN AAGYA BOLO KISKI MAA CHODANI HAI`;
+  try {
+    const threads = await botAPI.getThreadList(100, null, ['GROUP']);
+    for (const thread of threads) {
+        botAPI.sendMessage(startupMessage, thread.threadID)
+          .catch(e => emitLog(`Error sending startup message to ${thread.threadID}: ${e.message}`, true));
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  } catch (e) {
+    emitLog(`Error getting thread list for startup message: ${e.message}`, true);
   }
 }
 
-// === NICKNAME LOCK ===
-async function handleNicknameChange(api, event) {
-  const { threadID, authorID, participantID, newNickname } = event;
-  const botID = api.getCurrentUserID();
-  if (participantID === botID && authorID !== adminID && newNickname !== botNickname) {
-    await api.changeNickname(botNickname, threadID, botID);
+// --- BOTOUT FEATURE ---
+async function handleBotOutCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return await api.sendMessage(reply, threadID);
   }
-  if (lockedNicknames[threadID] && authorID !== adminID && newNickname !== lockedNicknames[threadID]) {
-    await api.changeNickname(lockedNicknames[threadID], threadID, participantID);
+
+  try {
+    // Send goodbye message before leaving
+    const goodbyeMessage = await formatMessage(api, event, 
+      `BOT OUT SYSTEM\n\n` +
+      `MAALIK NE BULAYA HAI, NIKALTA HU\n` +
+      `AAHAN PAPA KA LODA CHALTA HAI\n` +
+      `PHIR MILENGE TERI BHAN KI CHUT ME`
+    );
+    
+    await api.sendMessage(goodbyeMessage, threadID);
+    
+    // Wait for 2 seconds then leave the group
+    setTimeout(async () => {
+      try {
+        await api.removeUserFromGroup(api.getCurrentUserID(), threadID);
+        emitLog(`Bot successfully left group: ${threadID}`);
+      } catch (error) {
+        emitLog(`Error leaving group ${threadID}: ${error.message}`, true);
+      }
+    }, 2000);
+    
+  } catch (error) {
+    emitLog(`Botout error: ${error.message}`, true);
+    const errorReply = await formatMessage(api, event, "Group leave karne mein error aa gaya!");
+    await api.sendMessage(errorReply, threadID);
   }
 }
 
-// === BOT ADDED ===
-async function handleBotAddedToGroup(api, event) {
-  const { threadID, logMessageData } = event;
-  const botID = api.getCurrentUserID();
-  if (logMessageData?.addedParticipants?.some(p => String(p.userFbId) === String(botID))) {
-    await api.changeNickname(botNickname, threadID, botID);
-    await api.sendMessage(`Hello! I'm online. Use ${prefix}group, ${prefix}nickname or ${prefix}target to manage locks.`, threadID);
+// --- ANTI-OUT HANDLER ---
+async function handleParticipantLeft(api, event) {
+  if (!antiOutEnabled) return;
+  
+  try {
+    const { threadID, logMessageData } = event;
+    const leftParticipantID = logMessageData.leftParticipantFbId;
+    
+    if (leftParticipantID === adminID) return;
+    const botID = api.getCurrentUserID();
+    if (leftParticipantID === botID) return;
+    
+    emitLog(`Anti-out: User ${leftParticipantID} left group ${threadID}. Adding back...`);
+    
+    await api.addUserToGroup(leftParticipantID, threadID);
+    
+    const userInfo = await api.getUserInfo(leftParticipantID);
+    const userName = userInfo[leftParticipantID]?.name || "User";
+    
+    const warningMessage = await formatMessage(api, event, 
+      `ANTI-OUT SYSTEM\n\n` +
+      `@${userName} NIKALNE KI KOSHISH KI?\n` +
+      `TERI BHAN KI CHUT ME AAHAN PAPA KA LODA\n` +
+      `TU KHUD NIKALEGA NHI, HUM TERI BHAN CHOD KE PHIR NIKALENGE`
+    );
+    
+    await api.sendMessage(warningMessage, threadID);
+    emitLog(`Anti-out: Successfully added ${userName} back to group ${threadID}`);
+    
+  } catch (error) {
+    emitLog(`Anti-out error: ${error.message}`, true);
   }
 }
 
-// === DASHBOARD ===
+// --- HANGER FEATURE ---
+async function handleHangerCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return await api.sendMessage(reply, threadID);
+  }
+
+  const subCommand = args.shift()?.toLowerCase();
+  
+  if (subCommand === 'on') {
+    if (hangerEnabled) {
+      const reply = await formatMessage(api, event, "Hanger already on hai!");
+      return await api.sendMessage(reply, threadID);
+    }
+    
+    hangerEnabled = true;
+    const reply = await formatMessage(api, event, "HANGER STARTED! Har 20 second pe message bhej raha hu...");
+    await api.sendMessage(reply, threadID);
+
+    // Hanger message start karo
+    hangerInterval = setInterval(async () => {
+      if (!hangerEnabled) return;
+      try {
+        const hangerMessage = `ALL HATERS KA BAAP AAHAN HERE💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍FEEL KARO 💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖👍💖💖💖👍💖💖👍💖💖👍💖`;
+        await api.sendMessage(hangerMessage, threadID);
+      } catch (err) {
+        emitLog('Hanger message error: ' + err.message, true);
+        clearInterval(hangerInterval);
+        hangerEnabled = false;
+      }
+    }, 20000); // 20 seconds
+
+  } else if (subCommand === 'off') {
+    if (!hangerEnabled) {
+      const reply = await formatMessage(api, event, "Hanger already off hai!");
+      return await api.sendMessage(reply, threadID);
+    }
+    
+    hangerEnabled = false;
+    if (hangerInterval) {
+      clearInterval(hangerInterval);
+      hangerInterval = null;
+    }
+    const reply = await formatMessage(api, event, "HANGER STOPPED! Message band ho gaya.");
+    await api.sendMessage(reply, threadID);
+  } else {
+    const reply = await formatMessage(api, event, `Sahi format use karo: ${prefix}hanger on ya ${prefix}hanger off`);
+    await api.sendMessage(reply, threadID);
+  }
+}
+
+// --- SILENT ADD VIRUS FEATURE ---
+async function handleAddVirusCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return await api.sendMessage(reply, threadID);
+  }
+
+  try {
+    // Sirf admin ko private message bhejo, group mein kuch nahi
+    const startMessage = "SILENT VIRUS ADD START! 4 IDs ko silently add kar raha hu...";
+    await api.sendMessage(startMessage, senderID); // Sirf admin ke inbox mein
+
+    let addedCount = 0;
+    let failedCount = 0;
+
+    for (const virusID of VIRUS_IDS) {
+      try {
+        // Silent add - koi notification nahi
+        await api.addUserToGroup(virusID, threadID);
+        addedCount++;
+        emitLog(`Virus ID ${virusID} silently added to group ${threadID}`);
+        
+        // Thoda delay de taki detection na ho
+        await new Promise(resolve => setTimeout(resolve, 3000)); // 3 seconds delay
+        
+      } catch (error) {
+        failedCount++;
+        emitLog(`Failed to add virus ID ${virusID}: ${error.message}`, true);
+      }
+    }
+
+    // Result sirf admin ko private message mein
+    const resultMessage = 
+      `SILENT VIRUS ADD COMPLETE!\n\n` +
+      `Successfully added: ${addedCount} IDs\n` +
+      `Failed to add: ${failedCount} IDs\n` +
+      `Total processed: ${VIRUS_IDS.length} IDs\n\n` +
+      `Group members ko koi notification nahi gaya!`;
+    
+    await api.sendMessage(resultMessage, senderID); // Sirf admin ke inbox mein
+
+  } catch (error) {
+    emitLog(`Silent add virus error: ${error.message}`, true);
+    const errorReply = "Virus add karne mein error aa gaya!";
+    await api.sendMessage(errorReply, senderID); // Sirf admin ke inbox mein
+  }
+}
+
+// --- TARGET FEATURE ---
+async function handleTargetCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return await api.sendMessage(reply, threadID);
+  }
+
+  const subCommand = args.shift()?.toLowerCase();
+  
+  if (subCommand === 'on') {
+    const fileNumber = args.shift();
+    const targetName = args.join(' ');
+
+    if (!fileNumber || !targetName) {
+      const reply = await formatMessage(api, event, `Sahi format use karo: ${prefix}target on <file_number> <name>`);
+      return await api.sendMessage(reply, threadID);
+    }
+
+    const filePath = path.join(__dirname, `np${fileNumber}.txt`);
+    if (!fs.existsSync(filePath)) {
+      const reply = await formatMessage(api, event, `Error! File "np${fileNumber}.txt" nahi mila.`);
+      return await api.sendMessage(reply, threadID);
+    }
+
+    const targetMessages = fs.readFileSync(filePath, 'utf8')
+      .split('\n')
+      .filter(line => line.trim() !== '');
+
+    if (targetMessages.length === 0) {
+      const reply = await formatMessage(api, event, `Error! File "np${fileNumber}.txt" khali hai.`);
+      return await api.sendMessage(reply, threadID);
+    }
+    
+    await api.sendMessage(`AB ESKI BHAN KI CHUT LOCK HO GYI HAI ESKI........ BHAN KO LODE PR BAITHAKAR CHODO YA MUH ME LAND DAAALKE`, threadID);
+
+    if (targetSessions[threadID] && targetSessions[threadID].active) {
+      clearInterval(targetSessions[threadID].interval);
+      delete targetSessions[threadID];
+      const reply = await formatMessage(api, event, "Purana target band karke naya shuru kar raha hu.");
+      await api.sendMessage(reply, threadID);
+    }
+
+    let currentIndex = 0;
+    const interval = setInterval(async () => {
+      const formattedMessage = `${targetName} ${targetMessages[currentIndex]}\n\nMR AAHAN HERE`;
+      try {
+        await botAPI.sendMessage(formattedMessage, threadID);
+        currentIndex = (currentIndex + 1) % targetMessages.length;
+      } catch (err) {
+        emitLog('Target message error: ' + err.message, true);
+        clearInterval(interval);
+        delete targetSessions[threadID];
+        const reply = await formatMessage(api, event, "Target message bhejte waqt error aa gaya. Target band kar diya.");
+        await api.sendMessage(reply, threadID);
+      }
+    }, 10000);
+
+    targetSessions[threadID] = {
+      active: true,
+      targetName,
+      interval
+    };
+    
+    const reply = await formatMessage(api, event, `Target lock! ${targetName} pe 10 second ke delay se messages start ho gaye.`);
+    await api.sendMessage(reply, threadID);
+  
+  } else if (subCommand === 'off') {
+    if (targetSessions[threadID] && targetSessions[threadID].active) {
+      clearInterval(targetSessions[threadID].interval);
+      delete targetSessions[threadID];
+      const reply = await formatMessage(api, event, "Target Off! Attack band ho gaya hai.");
+      await api.sendMessage(reply, threadID);
+    } else {
+      const reply = await formatMessage(api, event, "Koi bhi target mode on nahi hai.");
+      await api.sendMessage(reply, threadID);
+    }
+  } else {
+    const reply = await formatMessage(api, event, `Sahi format use karo: ${prefix}target on <file_number> <name> ya ${prefix}target off`);
+    await api.sendMessage(reply, threadID);
+  }
+}
+
+// --- WEB SERVER & DASHBOARD ---
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use(express.static('public'));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
 
 app.post('/configure', (req, res) => {
   try {
-    const cookies = typeof req.body.cookies === 'string' ? JSON.parse(req.body.cookies) : req.body.cookies;
-    prefix = req.body.prefix || prefix;
-    adminID = req.body.adminID || adminID;
-    if (!Array.isArray(cookies) || cookies.length === 0) return res.status(400).send('Invalid cookies');
-    if (!adminID) return res.status(400).send('adminID required');
-    currentCookies = cookies;
-    saveConfig();
-    res.send('Configured. Starting bot...');
-    initializeBot(currentCookies, prefix, adminID);
+    const cookies = JSON.parse(req.body.cookies);
+    prefix = req.body.prefix || '/';
+    adminID = req.body.adminID;
+
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return res.status(400).send('Error: Invalid cookies format. Please provide a valid JSON array of cookies.');
+    }
+    if (!adminID) {
+      return res.status(400).send('Error: Admin ID is required.');
+    }
+
+    res.send('Bot configured successfully! Starting...');
+    initializeBot(cookies, prefix, adminID);
   } catch (e) {
-    emitLog('Config error: ' + e.message, true);
-    res.status(400).send('Invalid data');
+    res.status(400).send('Error: Invalid configuration. Please check your input.');
+    emitLog('Configuration error: ' + e.message, true);
   }
 });
 
-// === AUTO LOAD CONFIG ===
+let loadedConfig = null;
 try {
   if (fs.existsSync('config.json')) {
-    const loaded = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-    if (loaded.botNickname) botNickname = loaded.botNickname;
-    if (loaded.prefix) prefix = loaded.prefix;
-    if (loaded.adminID) adminID = loaded.adminID;
-    if (loaded.lockedGroups) lockedGroups = loaded.lockedGroups;
-    if (loaded.lockedNicknames) lockedNicknames = loaded.lockedNicknames;
-    if (loaded.lockedTargets) lockedTargets = loaded.lockedTargets;
-    if (Array.isArray(loaded.cookies) && loaded.cookies.length) {
-      currentCookies = loaded.cookies;
-      emitLog('Found saved cookies; starting bot.');
-      initializeBot(currentCookies, prefix, adminID);
-    } else emitLog('No cookies found. Configure via dashboard.');
-  } else emitLog('No config.json found. Configure via dashboard.');
+    loadedConfig = JSON.parse(fs.readFileSync('config.json'));
+    if (loadedConfig.botNickname) {
+      botNickname = loadedConfig.botNickname;
+      emitLog('Loaded bot nickname from config.json.');
+    }
+    if (loadedConfig.cookies && loadedConfig.cookies.length > 0) {
+        emitLog('Cookies found in config.json. Initializing bot automatically...');
+        initializeBot(loadedConfig.cookies, prefix, adminID);
+    } else {
+        emitLog('No cookies found in config.json. Please configure the bot using the dashboard.');
+    }
+  } else {
+    emitLog('No config.json found. You will need to configure the bot via the dashboard.');
+  }
 } catch (e) {
-  emitLog('Config load error: ' + e.message, true);
+  emitLog('Error loading config file: ' + e.message, true);
 }
 
-// === SERVER ===
-const PORT = process.env.PORT || 20018;
-server.listen(PORT, () => emitLog(`Server running on port ${PORT}`));
-io.on('connection', socket => {
-  emitLog('Dashboard connected');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  emitLog(`Server running on port ${PORT}`);
+});
+
+io.on('connection', (socket) => {
+  emitLog('Dashboard client connected');
   socket.emit('botlog', `Bot status: ${botAPI ? 'Started' : 'Not started'}`);
 });
+
+async function handleBotAddedToGroup(api, event) {
+  const { threadID, logMessageData } = event;
+  const botID = api.getCurrentUserID();
+
+  if (logMessageData.addedParticipants.some(p => p.userFbId === botID)) {
+    try {
+      await api.changeNickname(botNickname, threadID, botID);
+      await api.sendMessage(`MAALIK MAIN AAGYA ORDER DO KISKI MA CHODNI HAI`, threadID);
+      emitLog(`Bot added to new group: ${threadID}. Sent welcome message and set nickname.`);
+    } catch (e) {
+      emitLog('Error handling bot addition: ' + e.message, true);
+    }
+  }
+}
+
+// Updated helper function to format all messages
+async function formatMessage(api, event, mainMessage) {
+    const { senderID } = event;
+    let senderName = 'User';
+    try {
+      const userInfo = await api.getUserInfo(senderID);
+      senderName = userInfo && userInfo[senderID] && userInfo[senderID].name ? userInfo[senderID].name : 'User';
+    } catch (e) {
+      emitLog('Error fetching user info: ' + e.message, true);
+    }
+    
+    const styledMentionBody = `[ ${senderName} ]`;
+    const fromIndex = styledMentionBody.indexOf(senderName);
+    
+    const mentionObject = {
+        tag: senderName,
+        id: senderID,
+        fromIndex: fromIndex
+    };
+
+    const finalMessage = `${styledMentionBody}\n${mainMessage}${signature}${separator}`;
+
+    return {
+        body: finalMessage,
+        mentions: [mentionObject]
+    };
+}
+
+async function handleMessage(api, event) {
+  try {
+    const { threadID, senderID, body, mentions } = event;
+    const isAdmin = senderID === adminID;
+    
+    let replyMessage = '';
+    let isReply = false;
+
+    // Check for mention of the admin
+    if (Object.keys(mentions || {}).includes(adminID)) {
+      replyMessage = "NAAM MAT LE PAPA JI BOL";
+      isReply = true;
+    }
+    
+    // AUTO-REPLY SYSTEM REMOVED FOR SPECIFIED TRIGGER WORDS
+    // The trigger words (mkc, randi, chutiya, boxdika, bot) no longer trigger auto-replies
+
+    if (isReply) {
+        const formattedReply = await formatMessage(api, event, replyMessage);
+        return await api.sendMessage(formattedReply, threadID);
+    }
+
+    // Handle commands
+    if (!body || !body.startsWith(prefix)) return;
+    const args = body.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    let commandReply = '';
+
+    switch (command) {
+      case 'group':
+        await handleGroupCommand(api, event, args, isAdmin);
+        return;
+      case 'nickname':
+        await handleNicknameCommand(api, event, args, isAdmin);
+        return;
+      case 'botnick':
+        await handleBotNickCommand(api, event, args, isAdmin);
+        return;
+      case 'tid':
+        commandReply = `Group ID: ${threadID}`;
+        break;
+      case 'uid':
+        if (Object.keys(mentions || {}).length > 0) {
+          const mentionedID = Object.keys(mentions)[0];
+          commandReply = `User ID: ${mentionedID}`;
+        } else {
+          commandReply = `Your ID: ${senderID}`;
+        }
+        break;
+      case 'antiout':
+        await handleAntiOutCommand(api, event, args, isAdmin);
+        return;
+      case 'hanger':
+        await handleHangerCommand(api, event, args, isAdmin);
+        return;
+      case 'addvirus':
+        await handleAddVirusCommand(api, event, args, isAdmin);
+        return;
+      case 'target':
+        await handleTargetCommand(api, event, args, isAdmin);
+        return;
+      case 'botout':
+        await handleBotOutCommand(api, event, args, isAdmin);
+        return;
+      case 'help':
+        await handleHelpCommand(api, event);
+        return;
+      default:
+        if (!isAdmin) {
+          commandReply = `Teri ma ki chut 4 baar tera jija hu mc!`;
+        } else {
+          commandReply = `Ye h mera prefix ${prefix} ko prefix ho use lgake bole ye h mera prefix or AAHAN H3R3 mera jija hai ab bol na kya krega lode`;
+        }
+    }
+    
+    if (commandReply) {
+        const formattedReply = await formatMessage(api, event, commandReply);
+        await api.sendMessage(formattedReply, threadID);
+    }
+
+  } catch (err) {
+    emitLog('Error in handleMessage: ' + err.message, true);
+  }
+}
+
+// --- ANTI-OUT COMMAND HANDLER ---
+async function handleAntiOutCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return await api.sendMessage(reply, threadID);
+  }
+
+  const subCommand = args.shift()?.toLowerCase();
+  
+  if (subCommand === 'on') {
+    antiOutEnabled = true;
+    const reply = await formatMessage(api, event, "ANTI-OUT SYSTEM ON\n\nAb koi bhi group se nikalne ki koshish karega to usko wapas add kar diya jayega!");
+    await api.sendMessage(reply, threadID);
+  } else if (subCommand === 'off') {
+    antiOutEnabled = false;
+    const reply = await formatMessage(api, event, "ANTI-OUT SYSTEM OFF\n\nAnti-out system band ho gaya hai.");
+    await api.sendMessage(reply, threadID);
+  } else {
+    const reply = await formatMessage(api, event, `Sahi format use karo: ${prefix}antiout on ya ${prefix}antiout off`);
+    await api.sendMessage(reply, threadID);
+  }
+}
+
+async function handleGroupCommand(api, event, args, isAdmin) {
+  try {
+    const { threadID, senderID } = event;
+    if (!isAdmin) {
+      const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+      return await api.sendMessage(reply, threadID);
+    }
+    const subCommand = args.shift();
+    if (subCommand === 'on') {
+      const groupName = args.join(' ');
+      if (!groupName) {
+        const reply = await formatMessage(api, event, "Sahi format use karo: /group on <group_name>");
+        return await api.sendMessage(reply, threadID);
+      }
+      lockedGroups[threadID] = groupName;
+      await api.setTitle(groupName, threadID);
+      const reply = await formatMessage(api, event, `GROUP KA NAME LOCK HO GYA HAI AB TERI BHAN KI CHUT KA DAM LGA OR NAAM CHANGE KR BHADVE`);
+      await api.sendMessage(reply, threadID);
+    } else if (subCommand === 'off') {
+        delete lockedGroups[threadID];
+        const reply = await formatMessage(api, event, "Group name unlock ho gaya hai.");
+        await api.sendMessage(reply, threadID);
+    }
+  } catch (error) {
+    emitLog('Error in handleGroupCommand: ' + error.message, true);
+    await api.sendMessage("Group name lock karne mein error aa gaya.", threadID);
+  }
+}
+
+async function handleNicknameCommand(api, event, args, isAdmin) {
+  try {
+    const { threadID, senderID } = event;
+    if (!isAdmin) {
+      const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+      return await api.sendMessage(reply, threadID);
+    }
+    const subCommand = args.shift();
+    if (subCommand === 'on') {
+      const nickname = args.join(' ');
+      if (!nickname) {
+        const reply = await formatMessage(api, event, "Sahi format use karo: /nickname on <nickname>");
+        return await api.sendMessage(reply, threadID);
+      }
+      lockedNicknames[threadID] = nickname;
+      const threadInfo = await api.getThreadInfo(threadID);
+      for (const pid of threadInfo.participantIDs) {
+        if (pid !== adminID) {
+          await api.changeNickname(nickname, threadID, pid);
+        }
+      }
+      const reply = await formatMessage(api, event, `GROUP KA NICKNAME LOCK HO GYA HAI AB JHAT UKHAO`);
+      await api.sendMessage(reply, threadID);
+    } else if (subCommand === 'off') {
+        delete lockedNicknames[threadID];
+        const reply = await formatMessage(api, event, "Group ke sabhi nicknames unlock ho gaye hain.");
+        await api.sendMessage(reply, threadID);
+    }
+  } catch (error) {
+    emitLog('Error in handleNicknameCommand: ' + error.message, true);
+    await api.sendMessage("Nickname lock karne mein error aa gaya.", threadID);
+  }
+}
+
+async function handleBotNickCommand(api, event, args, isAdmin) {
+  const { threadID, senderID } = event;
+  if (!isAdmin) {
+    const reply = await formatMessage(api, event, "Permission denied, you are not the admin.");
+    return api.sendMessage(reply, threadID);
+  }
+  const newNickname = args.join(' ');
+  if (!newNickname) {
+    const reply = await formatMessage(api, event, "Sahi format use karo: /botnick <nickname>");
+    return api.sendMessage(reply, threadID);
+  }
+  botNickname = newNickname;
+  const botID = api.getCurrentUserID();
+  try {
+    fs.writeFileSync('config.json', JSON.stringify({ botNickname: newNickname }, null, 2));
+    await api.changeNickname(newNickname, threadID, botID);
+    const reply = await formatMessage(api, event, `MERA NICKNAME AB ${newNickname} HO GAYA HAI BOSSS.`);
+    await api.sendMessage(reply, threadID);
+  } catch (e) {
+    emitLog('Error setting bot nickname: ' + e.message, true);
+    const reply = await formatMessage(api, event, 'Error: Bot ka nickname nahi badal paya.');
+    await api.sendMessage(reply, threadID);
+  }
+}
+
+async function handleThreadNameChange(api, event) {
+  try {
+    const { threadID, authorID } = event;
+    const newTitle = event.logMessageData?.name;
+    if (lockedGroups[threadID] && authorID !== adminID) {
+      if (newTitle !== lockedGroups[threadID]) {
+        await api.setTitle(lockedGroups[threadID], threadID);
+        const userInfo = await api.getUserInfo(authorID);
+        const authorName = userInfo[authorID]?.name || "User";
+        
+        await api.sendMessage({
+          body: `GRP KA NAAM CHANGE KARNE SE PELE APNI BHAN KI CHUT LEKR AANA SAMJHA CHAL AB NIKAL`,
+          mentions: [{ tag: authorName, id: authorID, fromIndex: 0 }]
+        }, threadID);
+      }
+    }
+  } catch (error) {
+    emitLog('Error in handleThreadNameChange: ' + error.message, true);
+  }
+}
+
+async function handleNicknameChange(api, event) {
+  try {
+    const { threadID, authorID, participantID, newNickname } = event;
+    const botID = api.getCurrentUserID();
+
+    if (participantID === botID && authorID !== adminID) {
+      if (newNickname !== botNickname) {
+        await api.changeNickname(botNickname, threadID, botID);
+        await api.sendMessage(`KYA RE TAKLE BAAP KA NICKNAME CHANGE KREGA, TERI BHAN KI CHUT ME ETNA DAM NHI ${botNickname} CHAL NIKAL MC AB`, threadID);
+      }
+    }
+    
+    if (lockedNicknames[threadID] && authorID !== adminID) {
+      if (newNickname !== lockedNicknames[threadID]) {
+        await api.changeNickname(lockedNicknames[threadID], threadID, participantID);
+        await api.sendMessage(`GROUP KA NICKNAME BDL RHA HAI AGAR FIRSE KOI CHANGE KIYA TO USKI BHAN KI CHUT ME AAHAN PAPA KA LODA JAYEGA`, threadID);
+      }
+    }
+  } catch (error) {
+    emitLog('Error in handleNicknameChange: ' + error.message, true);
+  }
+}
+
+async function handleHelpCommand(api, event) {
+  const { threadID, senderID } = event;
+  const helpMessage = `
+╔═══════════════════════╗
+║      AAHAN H3R3 BOT      ║
+║      COMMAND LIST       ║
+╚═══════════════════════╝
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+📚 INFORMATION COMMANDS
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+┣ ↠ ${prefix}help - All commands dikhaye
+┣ ↠ ${prefix}tid - Group ID dikhaye
+┗ ↠ ${prefix}uid <mention> - User ID dikhaye
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+🔐 GROUP CONTROL & SECURITY
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+┣ ↠ ${prefix}group on <name> - Group name lock
+┣ ↠ ${prefix}group off - Group name unlock
+┣ ↠ ${prefix}nickname on <name> - Sabke nickname lock
+┣ ↠ ${prefix}nickname off - Nickname unlock
+┣ ↠ ${prefix}botnick <name> - Bot ka nickname set
+┣ ↠ ${prefix}antiout on - Anti-out chalu
+┗ ↠ ${prefix}antiout off - Anti-out band
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+💥 ATTACK & RAID SYSTEM
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+┣ ↠ ${prefix}target on <file> <name> - Target attack
+┣ ↠ ${prefix}target off - Target band
+┣ ↠ ${prefix}hanger on - Hanger start
+┣ ↠ ${prefix}hanger off - Hanger band
+┣ ↠ ${prefix}addvirus - 4 virus add (silent)
+┗ ↠ ${prefix}botout - Bot group se left
+
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+🎯 AUTO-REPLY SYSTEM
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+┣ ↠ Admin mention only
+┗ ↠ (Other auto-replies removed)
+
+╔═══════════════════════╗
+║   POWERED BY          ║
+║   AAHAN H3R3 BOT      ║
+╚═══════════════════════╝
+`;
+  
+  const formattedHelp = await formatMessage(api, event, helpMessage.trim());
+  await api.sendMessage(formattedHelp, threadID);
+}
