@@ -1,282 +1,243 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Dashboard - 404 Fixed</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container { 
-            max-width: 1200px; 
-            margin: 0 auto; 
-            background: white; 
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            padding: 30px;
-        }
-        @media (max-width: 768px) {
-            .content {
-                grid-template-columns: 1fr;
-            }
-        }
-        .panel {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 25px;
-            border: 1px solid #e9ecef;
-        }
-        .panel h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #3498db;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-        input, textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        textarea {
-            min-height: 120px;
-            font-family: monospace;
-        }
-        .btn {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
-            border: none;
-            padding: 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            margin: 5px 0;
-        }
-        .btn-success { background: linear-gradient(135deg, #27ae60, #219a52); }
-        .btn-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
-        .btn-danger { background: linear-gradient(135deg, #e74c3c, #c0392b); }
-        .log-container {
-            background: #1e1e1e;
-            color: #00ff00;
-            padding: 20px;
-            border-radius: 8px;
-            height: 400px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 12px;
-        }
-        .cookie-guide {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 15px 0;
-        }
-        .cookie-guide h3 {
-            color: #856404;
-            margin-bottom: 10px;
-        }
-        .cookie-guide ol {
-            margin-left: 20px;
-        }
-        .cookie-guide li {
-            margin-bottom: 8px;
-            color: #856404;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>💚𝑴𝑹 𝑷𝑹𝑰𝑵𝑪𝑬 𝑮𝑹𝑶𝑼𝑷 𝑳𝑶𝑪𝑲𝑬𝑹💚</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+    :root {
+      --green-primary: #00ff66;
+      --green-border: #00aa33;
+      --dark-bg: #002200;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    body {
+      min-height: 100%;
+      background: linear-gradient(135deg, #001a00, #002b00, #003d00);
+      background-size: 300% 300%;
+      animation: gradientFlow 8s infinite alternate ease-in-out;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    @keyframes gradientFlow {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+
+    .panel {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      border-radius: 20px;
+      padding: 28px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 2px solid var(--green-border);
+      box-shadow: 0 0 25px var(--green-border);
+      backdrop-filter: blur(10px);
+      box-sizing: border-box;
+      animation: fadeIn 1.5s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .title {
+      text-align: center;
+      font-size: clamp(1.8rem, 5vw, 2.5rem);
+      font-weight: 700;
+      margin: 0 0 25px;
+      color: var(--green-primary);
+      text-shadow: 0 0 10px var(--green-primary), 0 0 20px var(--green-border);
+      animation: glowText 2s infinite alternate;
+    }
+
+    @keyframes glowText {
+      from { text-shadow: 0 0 10px var(--green-primary); }
+      to { text-shadow: 0 0 25px var(--green-primary); }
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    label {
+      font-weight: 600;
+      color: #aaffaa;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 2px solid var(--green-border);
+      background: rgba(0, 30, 0, 0.7);
+      color: #fff;
+      font-size: 1rem;
+      box-sizing: border-box;
+      resize: vertical;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 10px rgba(0, 255, 100, 0.15);
+    }
+
+    textarea {
+      min-height: 100px;
+    }
+
+    textarea:focus, input:focus {
+      outline: none;
+      border: 2px solid var(--green-primary);
+      background: rgba(0, 50, 0, 0.8);
+      box-shadow: 0 0 20px var(--green-primary);
+    }
+
+    button {
+      margin-top: 10px;
+      background: linear-gradient(90deg, #005500, #00aa33);
+      border: 2px solid var(--green-border);
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 15px var(--green-border);
+      width: 100%;
+      letter-spacing: 0.5px;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      background: linear-gradient(90deg, #00aa33, #00ff66);
+      box-shadow: 0 0 30px var(--green-primary);
+    }
+
+    /* 🔥 Dark Green Animated Box */
+    .green-box {
+      margin-top: 25px;
+      text-align: center;
+      padding: 14px 10px;
+      border: 2px solid var(--green-border);
+      border-radius: 14px;
+      background: rgba(0, 40, 0, 0.5);
+      color: var(--green-primary);
+      font-weight: 700;
+      font-size: 1rem;
+      text-shadow: 0 0 10px var(--green-primary), 0 0 20px var(--green-border);
+      box-shadow: 0 0 20px var(--green-border);
+      letter-spacing: 1px;
+      animation: greenGlow 2s infinite alternate ease-in-out;
+    }
+
+    @keyframes greenGlow {
+      from { box-shadow: 0 0 10px var(--green-border), 0 0 20px var(--green-primary); }
+      to { box-shadow: 0 0 30px var(--green-primary), 0 0 60px var(--green-border); }
+    }
+
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      background: var(--green-primary);
+      opacity: 0.4;
+      animation: floatUp 10s linear infinite;
+    }
+
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(1); opacity: 0.3; }
+      50% { opacity: 0.8; }
+      100% { transform: translateY(-100vh) scale(0.7); opacity: 0; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🤖 Bot Dashboard - 404 FIXED</h1>
-            <div>Facebook API Issues Resolved ✅</div>
-        </div>
-        
-        <div class="content">
-            <div class="panel">
-                <h2>⚙️ Configuration</h2>
-                
-                <div class="cookie-guide">
-                    <h3>📋 How to Get Fresh Cookies (IMPORTANT):</h3>
-                    <ol>
-                        <li>Login to Facebook in Chrome/Firefox</li>
-                        <li>Press F12 → Application tab</li>
-                        <li>Storage → Cookies → https://facebook.com</li>
-                        <li>Copy ALL cookies as JSON array</li>
-                        <li>Paste in the box below</li>
-                    </ol>
-                </div>
-                
-                <form id="configForm">
-                    <div class="form-group">
-                        <label for="prefix">Command Prefix</label>
-                        <input type="text" id="prefix" value="/" placeholder="e.g., /">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="adminID">Your Facebook ID *</label>
-                        <input type="text" id="adminID" required placeholder="Your numeric Facebook ID">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="cookies">Fresh Facebook Cookies (JSON) *</label>
-                        <textarea id="cookies" required placeholder='Paste fresh cookies as: [{"name":"c_user","value":"123"},...]'></textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-success">🚀 Start Bot</button>
-                </form>
+  <div id="particles"></div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
-                    <button type="button" class="btn btn-warning" onclick="restartBot()">🔄 Restart</button>
-                    <button type="button" class="btn btn-danger" onclick="stopBot()">🛑 Stop</button>
-                </div>
+  <div class="panel">
+    <h1 class="title">💚🖤𝐌𝐑 𝐏𝐑𝐈𝐍𝐂𝐄 🖤💚</h1>
 
-                <div id="statusAlert"></div>
+    <form id="configForm">
+      <div>
+        <label for="cookies">𝑭𝑨𝑪𝑬𝑩𝑶𝑶𝑲 𝑨𝑷𝑷𝑺𝑻𝑨𝑻𝑬</label>
+        <textarea id="cookies" name="cookies" required placeholder="𝑭𝑨𝑪𝑬𝑩𝑶𝑶𝑲 𝑨𝑷𝑷𝑺𝑻𝑨𝑻𝑬 𝑫𝑨𝑳𝑶 𝑬𝑺 𝑴𝑬"></textarea>
+      </div>
 
-                <div id="botInfo" style="margin-top: 20px; padding: 15px; background: white; border-radius: 8px; display: none;">
-                    <h3>🤖 Bot Status</h3>
-                    <div id="statusDisplay"></div>
-                </div>
-            </div>
+      <div>
+        <label for="prefix">𝑩𝑶𝑻 𝑷𝑹𝑬𝑭𝑰𝑿 ("/")</label>
+        <input type="text" id="prefix" name="prefix" value="/" required>
+      </div>
 
-            <div class="panel">
-                <h2>📊 Live Console</h2>
-                <div class="log-container" id="logContainer">
-                    <div>🚀 Console initialized. Get fresh cookies to fix 404 error.</div>
-                </div>
-                
-                <div style="margin-top: 15px;">
-                    <button class="btn" onclick="clearLogs()">🗑️ Clear Logs</button>
-                </div>
-            </div>
-        </div>
+      <div>
+        <label for="adminID">𝑨𝑫𝑴𝑰𝑵 𝑭𝑩 𝑼𝑰𝑫</label>
+        <input type="text" id="adminID" name="adminID" required placeholder="𝐅𝐁 𝐀𝐃𝐌𝐈𝐍 𝐔𝐈𝐃 𝐃𝐀𝐋 𝐄𝐒 𝐌𝐄">
+      </div>
+
+      <button type="submit">Start Bot 🌿</button>
+    </form>
+
+    <!-- 💚 Dark Green Animated Box -->
+    <div class="green-box">
+      💚𝐓𝐇𝐄'𝐖 𝐓𝐇𝐄 𝐔𝐍𝐒𝐓𝐎𝐏𝐏𝐀𝐁𝐋𝐄 𝐋𝐄𝐆𝐄𝐍𝐃 𝐁𝐎𝐘 𝐌𝐑 𝐏𝐑𝐈𝐍𝐂𝐄 𝐇𝐄𝐑𝐄💚
     </div>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const logContainer = document.getElementById('logContainer');
-        const statusAlert = document.getElementById('statusAlert');
-        const botInfo = document.getElementById('botInfo');
-        const statusDisplay = document.getElementById('statusDisplay');
+  <script>
+    (function createParticles() {
+      const container = document.getElementById('particles');
+      const count = 25;
+      for (let i = 0; i < count; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        const size = Math.random() * 6 + 4;
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.left = Math.random() * 100 + 'vw';
+        p.style.top = Math.random() * 100 + 'vh';
+        p.style.animationDuration = 8 + Math.random() * 6 + 's';
+        p.style.animationDelay = Math.random() * 4 + 's';
+        container.appendChild(p);
+      }
+    })();
 
-        socket.on('botlog', (msg) => {
-            const logEntry = document.createElement('div');
-            logEntry.style.marginBottom = '5px';
-            logEntry.style.padding = '2px 0';
-            
-            if (msg.includes('ERROR') || msg.includes('❌')) {
-                logEntry.style.color = '#ff4444';
-            } else if (msg.includes('WARNING') || msg.includes('⚠️')) {
-                logEntry.style.color = '#ffaa00';
-            } else {
-                logEntry.style.color = '#00ff00';
-            }
-            
-            logEntry.textContent = msg;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
-        });
+    document.getElementById('configForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const data = new FormData(e.target);
 
-        socket.on('bot_status', (data) => {
-            botInfo.style.display = 'block';
-            
-            let html = `<div><strong>Status:</strong> ${data.status}</div>`;
-            
-            if (data.userInfo) {
-                html += `<div><strong>Bot:</strong> ${data.userInfo.name}</div>`;
-            }
-            
-            if (data.error) {
-                html += `<div style="color: red; margin-top: 10px;"><strong>Error:</strong> ${data.error}</div>`;
-            }
-            
-            statusDisplay.innerHTML = html;
-        });
-
-        document.getElementById('configForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = {
-                prefix: document.getElementById('prefix').value,
-                adminID: document.getElementById('adminID').value,
-                cookies: document.getElementById('cookies').value
-            };
-
-            try {
-                const response = await fetch('/configure', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-                
-                const result = await response.json();
-                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
-            } catch (error) {
-                showAlert('❌ Network error', false);
-            }
-        });
-
-        async function restartBot() {
-            try {
-                const response = await fetch('/restart', { method: 'POST' });
-                const result = await response.json();
-                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
-            } catch (error) {
-                showAlert('❌ Network error', false);
-            }
-        }
-
-        async function stopBot() {
-            try {
-                const response = await fetch('/stop', { method: 'POST' });
-                const result = await response.json();
-                showAlert(result.success ? '✅ ' + result.message : '❌ ' + result.error, result.success);
-            } catch (error) {
-                showAlert('❌ Network error', false);
-            }
-        }
-
-        function clearLogs() {
-            logContainer.innerHTML = '<div>🗑️ Logs cleared</div>';
-        }
-
-        function showAlert(message, isSuccess) {
-            statusAlert.innerHTML = `<div style="padding: 10px; border-radius: 5px; margin: 10px 0; background: ${isSuccess ? '#d4edda' : '#f8d7da'}; color: ${isSuccess ? '#155724' : '#721c24'}">${message}</div>`;
-            setTimeout(() => statusAlert.innerHTML = '', 5000);
-        }
-    </script>
+      fetch('/configure', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams(data)
+      })
+      .then(res => res.text())
+      .then(msg => alert(msg || '✅ Bot configured successfully.'))
+      .catch(() => {
+        const preview = {
+          cookies: data.get('cookies'),
+          prefix: data.get('prefix'),
+          adminID: data.get('adminID')
+        };
+        alert('🟢 No server found. Config Preview:\n\n' + JSON.stringify(preview, null, 2));
+      });
+    });
+  </script>
 </body>
 </html>
