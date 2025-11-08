@@ -1,15 +1,31 @@
 {
-  "name": "facebook-bot",
-  "version": "1.0.0", 
-  "description": "Working Facebook Bot",
-  "main": "bot.js",
+  "name": "legend-prince-bot",
+  "version": "1.0.0",
+  "description": "Facebook Messenger Bot with Group Management Features",
+  "main": "clean_bot_full.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node clean_bot_full.js",
+    "dev": "nodemon clean_bot_full.js"
   },
+  "keywords": [
+    "facebook",
+    "bot",
+    "messenger",
+    "automation"
+  ],
+  "author": "Legend Prince",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "@open-wa/wa-automate": "^4.0.4",
+    "body-parser": "^1.20.2",
+    "ws3-fca": "^1.0.1",
     "socket.io": "^4.7.2",
-    "axios": "^1.5.0"
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
